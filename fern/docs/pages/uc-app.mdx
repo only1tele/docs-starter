@@ -1,358 +1,168 @@
 ---
 title: Bring your product to AI agents
-subtitle: Make the products, services and APIs your customers already use available to AI agents through MCP, without building a separate agent-specific backend.
+subtitle: Make your existing products, services and APIs available to AI agents through MCP.
 ---
 
-Your web or mobile application is already a client of your API. An AI agent is another client. It reads a tool description instead of a screen.
+Connect your existing API to Mitu and make selected capabilities available as tools that AI agents can discover and use. You do not need to build a separate backend or recreate the business logic that already powers your product.
 
-With Mitu you register the API operations you want agents to use, and each becomes an MCP tool. A customer connects from an MCP-compatible AI client, authenticates with a customer key or with the account they already have through OAuth, and reaches the same services your existing product uses.
+Your API continues to handle the same products, customer accounts and business logic it handles today. You choose which operations agents can use and how customers authenticate when they connect from an AI client.
 
-Your endpoints do not become a separate "AI API". Mitu sits in front of the API you have and handles the agent-facing layer: discovery, tool descriptions and schemas, customer identity, payment requirements where you configure them, and signed forwarding to your backend.
+<Note title="Agent Wallets are optional">
+  You do not need to issue Agent Wallets to connect your product to AI agents. Agent Wallets are only needed when you want to give your customers wallets that their AI agents can use to make payments on their behalf.
 
-If your product already lets a customer search a catalogue, check a balance, book an appointment, place an order or make a reservation, those same capabilities can become tools their agent uses.
-
-<Note title="Agent Wallets are not required">
-MCP and Agent Wallets are independent. Add a wallet only when you want to give a customer's agent a Mitu-managed balance to spend from. Customers can pay by other supported methods, and free endpoints need no payment at all.
+  Learn more about [Agent Wallets](/platform/agent-wallets/overview).
 </Note>
-
-## What you will build
-
-1. Connect your existing API to Mitu.
-2. Register the endpoints agents should use.
-3. Choose customer-key or OAuth authentication.
-4. Connect the MCP from Claude or another MCP-compatible client.
-5. Confirm the agent can discover and call your tools.
-6. Optionally issue an Agent Wallet to a customer.
-7. Verify Mitu's signature in your backend.
 
 ## Before you begin
 
-You need:
+You need a Mitu account, an existing API that Mitu can reach and at least one API operation that you want AI agents to use.
 
-- A Mitu merchant account.
-- A server-side Mitu API key for API operations.
-- An existing HTTP API you want agents to reach.
-- At least one endpoint to expose as a tool.
-- For OAuth, an identity provider and its configuration.
-- For customer keys, a customer record created through the API.
-
-<Warning title="Merchant keys are server-side only">
-Never place an `sk_live_...` or `sk_test_...` key in Claude, ChatGPT, a browser or any customer-facing client. A merchant key can create customers, wallets and payment links. Customers receive an `mcpk_...` key instead, which can do none of those things.
-</Warning>
+If your tools need to identify the customer using them, you will also need to choose how customers authenticate. You can use customer keys or connect your existing OAuth sign in flow.
 
 <Steps toc={true}>
+  <Step title="Connect your existing API">
+    Start by connecting the API that already powers your product. In the dashboard, open your MCP configuration and provide the base URL that Mitu should use when calling your API.
 
-<Step title="Connect your existing API">
+    ```text
+    https://api.example.com
+    ```
 
-In the dashboard, open the integration settings for your MCP service and set the base URL of the API Mitu should call.
+    You do not need to create separate endpoints for AI agents. The same API that serves your existing application can also handle requests initiated through MCP.
 
-```text
-https://api.example.com
-```
+    When you connect your API, Mitu provides a signing secret that your backend uses to verify requests sent by Mitu. Keep this secret secure and use it only from your server.
 
-If your API exposes a health endpoint, set the health-check path as well. Mitu polls it so the dashboard can show whether your API is reachable.
+    Learn more about [Request verification](/platform/security/request-verification).
+  </Step>
 
-Mitu holds no credential for your API. Every request Mitu forwards is signed with a secret Mitu issues to you, and your backend verifies that signature to establish the request is genuine. When customer sign-in is enabled, Mitu also forwards the signed-in customer's access token, so your existing authorisation rules keep working unchanged.
+  <Step title="Choose the operations agents can use">
+    Choose which API operations you want to make available to AI agents. Each operation becomes an MCP tool that an agent can discover and call.
 
-{/* SCREENSHOT: docs/assets/use-cases/agent-channels/integration-api.png
-     Caption: "Connect the API that already powers your product."
-     Must show the API base URL, the health-check path and the customer
-     sign-in setting. No secrets visible. */}
+    For example, an existing commerce API might make these operations available.
 
-Both the [MCP overview](/platform/mcp/overview) and [request signature verification](/platform/security/request-verification) cover what happens to a request once Mitu forwards it.
+    ```text
+    GET   /products
+    GET   /products/{id}
+    POST  /orders
+    ```
 
-</Step>
+    Describe each operation clearly so an AI agent can understand what the tool does, when it should use the tool and what information it needs to provide.
 
-<Step title="Register the capabilities agents can use">
+    ```yaml
+    name: create_order
+    method: POST
+    path: /orders
+    description: Creates an order for the signed-in customer using the confirmed cart and delivery details
+    when_to_use: Use after the customer has confirmed the items, quantities, delivery address and final price
+    requires_auth: true
+    ```
 
-Each registered operation becomes a tool an agent can discover. A tool tells the model what the operation does, when to reach for it, the method and path, its input and output schemas, whether the caller must be a signed-in customer, and what it costs.
+    The description and schemas you provide help AI agents choose the correct tool and construct the request correctly.
 
-The configuration for a single endpoint reads like this:
+    If you already maintain an OpenAPI specification, you can import it instead of configuring each operation individually.
 
-```yaml
-name: create_order
-method: POST
-path: /orders
-description: Creates an order for the signed-in customer from the confirmed cart and delivery details
-when_to_use: Use after the customer has confirmed the items, quantities, delivery address and final price
-requires_auth: true
-pricing_type: dynamic
-```
+    Learn more about [MCP endpoints](/platform/mcp/endpoints) and [OpenAPI import](/platform/mcp/open-api-import).
+  </Step>
 
-This is a description of the endpoint record, not a request body. Endpoints are configured in the dashboard.
+  <Step title="Choose how customers authenticate">
+    If your tools need to know which customer is using them, choose how customers will authenticate when they connect from an AI client.
 
-Write `description` and `when_to_use` carefully. They are the whole basis on which a model decides which tool to call, and a route name restated as prose ("Creates order") gives it nothing to work with.
+    | Method | When to use it |
+    | --- | --- |
+    | Customer key | Use customer keys when you want to create customer access through the API and provide each customer with their own MCP credential. |
+    | OAuth | Use OAuth when customers already have accounts with your product and should continue signing in with their existing credentials. |
 
-If you already maintain an OpenAPI document, import it rather than adding operations by hand. Mitu creates one endpoint per operation, with the schemas attached.
+    With customer keys, you create a customer through the API. The customer receives an MCP URL and a customer key that identifies them when they connect from an AI client.
 
-{/* SCREENSHOT: docs/assets/use-cases/agent-channels/endpoints.png
-     Caption: "Registered endpoints become tools agents can discover and call."
-     Use a populated list, not an empty state, e.g.
-       get_products   GET   /products
-       get_product    GET   /products/{id}
-       create_order   POST  /orders */}
+    With OAuth, the customer connects the MCP URL and signs in through your existing identity provider. Their existing account remains their identity when they use your product through an AI client.
 
-The full field reference is on [MCP endpoints](/platform/mcp/endpoints), and the pricing behaviours are on [endpoint types](/platform/payments/pricing).
+    Both approaches allow agent activity to remain associated with the corresponding customer rather than creating a separate customer system for AI agents.
 
-</Step>
+    Learn more in [Connect customer accounts](/guides/integration-guides/connect-customer-accounts).
+  </Step>
 
-<Step title="Choose how customers authenticate">
+  <Step title="Connect from an AI client">
+    Once your MCP is configured, customers can add your MCP URL to a supported AI client.
 
-Customers connect in one of two ways. Both identify the customer to Mitu; they differ in how the customer proves who they are.
+    ```text
+    https://mcp.yourdomain.com/mcp
+    ```
 
-| Method | Use when | What the customer supplies |
-| --- | --- | --- |
-| Customer key | You provision customers yourself, or you do not run OAuth | MCP URL and an `mcpk_...` key |
-| OAuth | Customers already have accounts with your product | MCP URL and their existing sign-in |
+    Customers using a customer key connect with their MCP URL and customer key. Customers using OAuth add the MCP URL and complete your existing sign in flow.
 
-<Tabs>
+    After the connection succeeds, the AI client can discover the tools you made available.
 
-<Tab title="Customer key">
+    A customer can then ask their AI agent to use your product in the same way they would normally use your application. For example, a customer using a commerce product could ask their agent to find a product and place an order.
 
-Create the customer from your backend.
+    ```text
+    Find a black running shoe under $150 and order my usual size.
+    ```
 
-```bash title="Create a customer"
-curl --request POST \
-  --url https://api.mitu.ai/v1/customers \
-  --header "x-api-key: $MITU_API_KEY" \
-  --header "Idempotency-Key: customer-your_user_8841" \
-  --header "Content-Type: application/json" \
-  --data '{
-    "client_reference_id": "your_user_8841",
-    "first_name": "Ada",
-    "last_name": "Obi",
-    "email": "ada@example.com",
-    "phone": "+2348099887766"
-  }'
-```
+    The agent uses the descriptions and schemas you configured to determine which tools to call and what information each tool requires.
+  </Step>
 
-```json title="Response"
-{
-  "id": "cus_ds9hazr8jd3l",
-  "client_reference_id": "your_user_8841",
-  "first_name": "Ada",
-  "last_name": "Obi",
-  "email": "ada@example.com",
-  "phone": "+2348099887766",
-  "key": "mcpk_3a6f9d2a...",
-  "mcp_url": "https://mcp.yourdomain.com/mcp",
-  "created_at": "2026-09-11T15:00:34.915Z"
-}
-```
+  <Step title="Verify requests from Mitu">
+    When an AI agent uses one of your tools, Mitu sends the corresponding request to your API. Before processing the request, your backend should verify that the request came from Mitu.
 
-`client_reference_id` is the identifier from your own system. It keeps the Mitu customer tied to the user record you already have, it comes back on every later event as `customer_ref`, and it is what makes this call safe to retry.
+    When you connect your API, you receive a signing secret that your backend uses to verify requests sent by Mitu. Keep this secret secure and only use it from your server.
 
-The `key` in the response is a customer MCP key. It identifies one customer when their AI client connects to your MCP, and it is returned once. Deliver it to the customer over a channel you would use for any other credential.
+    Request verification is separate from your customer authentication. It confirms that the request was sent through Mitu before your application trusts the request and processes it.
 
-The customer then has two connection values:
+    If you use OAuth for customer authentication, the signed-in customer's access token is also forwarded with the request so your existing authorisation and account rules can continue to apply.
 
-```text
-MCP URL       https://mcp.yourdomain.com/mcp
-Customer key  mcpk_3a6f9d2a...
-```
+    See [Request verification](/platform/security/request-verification) for the verification process and implementation examples.
+  </Step>
 
-Their client sends the key on every MCP request:
+  <Step title="Test your integration">
+    Connect the MCP from a supported AI client and confirm that the tools you configured are available.
 
-```http
-x-api-key: mcpk_3a6f9d2a...
-```
+    Ask the agent to perform an action that uses one of your tools. Your API should receive the request, verify that it came from Mitu, process it using your existing business logic and return its normal response.
 
-`Authorization: Bearer <key>` is also accepted.
+    If the tools do not appear, confirm that the operations are enabled and that the customer has connected successfully. If a tool appears but the request does not reach your API, check your endpoint configuration and request verification logs.
 
-[Customers](/platform/customers/customer-api) covers the customer record in full, and [customer keys](/platform/customers/customer-keys) covers what an `mcpk_...` key can and cannot do.
-
-</Tab>
-
-<Tab title="OAuth">
-
-Use OAuth when customers already sign in to your product and the agent channel should use that same identity.
-
-Enable customer sign-in in the integration settings and configure your identity provider. When the customer adds your MCP URL to a compatible client, the client discovers the OAuth configuration and prompts them to sign in with the credentials they already have. Discovery is standards-based, so no key is handed out and nothing is pasted into the client.
-
-After sign-in, Mitu forwards the customer's access token with requests to your API, so your existing authorisation, entitlements and account rules continue to apply.
-
-You do not create the customer first in this flow. The first successful sign-in creates the Mitu customer from the identity provider's `sub` and emits `customer.created`:
-
-```json title="customer.created data"
-{
-  "source": "oauth",
-  "client_reference_id": "<oauth-sub>"
-}
-```
-
-Store that mapping if you will later act on the customer from your own backend, such as issuing them a wallet.
-
-{/* SCREENSHOT: docs/assets/use-cases/agent-channels/oauth-config.png
-     Caption: "Customers can sign in with the account they already use with
-     your product." Must show customer sign-in enabled and the OAuth
-     configuration fields. No client secret visible. */}
-
-[MCP authentication](/platform/mcp/authentication) describes the discovery surface, and [customers through OAuth](/platform/customers/oauth) covers the lifecycle of a customer who arrives this way.
-
-</Tab>
-
-</Tabs>
-
-</Step>
-
-<Step title="Connect the MCP in an AI client">
-
-Agents reach you at your Mitu URL, or at your own domain once you have verified it.
-
-```text
-https://mcp.mitu.ai/mcp
-https://mcp.yourdomain.com/mcp
-```
-
-Connections use Streamable HTTP.
-
-With customer-key authentication, give the customer the MCP URL and their `mcpk_...` key, and their client sends it as `x-api-key` on each request.
-
-{/* SCREENSHOT: docs/assets/use-cases/agent-channels/claude-key-connection.png
-     Caption: "Connect to the MCP using the customer-specific key issued by
-     Mitu." Use a clearly non-production example key. Capture the client's
-     real credential UI rather than a mock-up. */}
-
-With OAuth, the customer adds the MCP URL and nothing else. An unauthenticated `initialize` answers 401 with a `WWW-Authenticate` header naming the resource metadata, which is what makes the client offer a sign-in rather than fail.
-
-{/* SCREENSHOT: docs/assets/use-cases/agent-channels/claude-oauth.png
-     Caption: "The client discovers the OAuth flow and the customer signs in
-     with their existing account." */}
-
-Once connected, the client lists the tools registered for your service. That list is the confirmation that the channel works.
-
-{/* SCREENSHOT: docs/assets/use-cases/agent-channels/claude-tools.png
-     Caption: "The capabilities you registered are now available to the
-     customer's agent." Use a real populated tool list. */}
-
-If the tools do not appear, check that the endpoints are registered and public, and that the customer's credential is being sent. [Custom domains](/platform/mcp/domains) covers the case where the URL itself is not yet resolving.
-
-</Step>
-
-<Step title="Use the product through the agent">
-
-The customer can now ask their agent to do the things they would otherwise do in your app. For a commerce product the tools might be:
-
-```text
-get_products   GET   /products
-get_product    GET   /products/{id}
-create_order   POST  /orders
-```
-
-And the request that reaches them:
-
-```text
-Find a black running shoe under $150 and order my usual size.
-```
-
-The agent picks tools from their descriptions and schemas. On authenticated endpoints the request stays associated with the same customer: under OAuth their access token is forwarded to your API, and with a customer key Mitu identifies which customer is calling.
-
-Your API keeps all of the business logic. Mitu provides the access layer around it.
-
-{/* SCREENSHOT (optional): docs/assets/use-cases/agent-channels/claude-completed-action.png
-     Caption: "The agent uses your existing API through the tools exposed by
-     your MCP." Prefer a real successful run. */}
-
-</Step>
-
-<Step title="Optionally issue an Agent Wallet">
-
-Skip this step if your endpoints are free, or if customers already have another supported way to pay.
-
-An Agent Wallet is a wallet you issue to one of your customers. They fund it, and their agent spends from it within the limits you set. The money is the customer's; you are the operator.
-
-A wallet exists only because you created one. Signing in does not create a wallet, and neither does reading a balance.
-
-```bash title="Create a wallet"
-curl --request POST \
-  --url https://api.mitu.ai/v1/customers/cus_ds9hazr8jd3l/wallets \
-  --header "x-api-key: $MITU_API_KEY" \
-  --header "Content-Type: application/json" \
-  --data '{
-    "name": "Shopping",
-    "limits": {
-      "per_payment": 100,
-      "monthly": 1000,
-      "approve_above": 250
-    }
-  }'
-```
-
-```json title="Response"
-{
-  "id": "wal_fc2ff966abc04de09c22",
-  "customer_id": "cus_ds9hazr8jd3l",
-  "name": "Shopping",
-  "currency": "USDC",
-  "limits": {
-    "per_payment": 100,
-    "monthly": 1000,
-    "approve_above": 250,
-    "currency": "USD"
-  },
-  "addresses": [
-    { "network": "base",   "address": "0xd7Ca1fdA..." },
-    { "network": "tempo",  "address": "0xd7Ca1fdA..." },
-    { "network": "solana", "address": "3c6SpTNK..." }
-  ],
-  "created_at": "2026-09-11T15:01:32.760Z"
-}
-```
-
-The name matters, because the customer says it out loud and their agent names it when paying. The three controls are `per_payment`, the most one payment may be; `monthly`, the most this wallet may spend in a calendar month; and `approve_above`, the amount over which a payment waits for the customer to approve it. All are in USD.
-
-{/* SCREENSHOT: docs/assets/use-cases/agent-channels/create-wallet.png
-     Caption: "Issue a wallet to the customer and configure how much their
-     agent can spend." Must show the selected customer, the wallet name and
-     the limits. No real balances or customer data. */}
-
-[Agent Wallets](/platform/agent-wallets/overview) covers the model, [limits and controls](/platform/agent-wallets/limits-and-controls) the exact semantics of each control, and [funding](/platform/agent-wallets/funding) how money reaches a wallet.
-
-</Step>
-
-<Step title="Verify requests in your backend">
-
-Mitu signs every request it forwards. Verify that signature before your endpoint does any work, because everything else in the request is a plain header and means nothing until the signature proves the request came from Mitu.
-
-A forwarded request carries:
-
-```text
-x-mitu-signature       proof the request is from Mitu
-x-mitu-request-id      req_... unique per call, use it for idempotency
-x-mitu-amount-charged  present only when money moved
-x-mitu-customer-id     cus_... Mitu's id for the payer
-x-mitu-customer-ref    your id for the payer, from client_reference_id
-x-mitu-agent-id        which agent made the call
-authorization          the customer's token, when OAuth is in use
-```
-
-`x-mitu-amount-charged` is absent on a price check, so treat a missing value as normal rather than as an error. Deduplicate on `x-mitu-request-id`: the signature stays valid for its lifetime, so that check is the only thing stopping the same paid request being served twice.
-
-The algorithm, a worked Node implementation and the rules that go with it are on [request signature verification](/platform/security/request-verification).
-
-</Step>
-
+    Once a tool can be discovered and called successfully, your product is ready to be used through supported AI clients.
+  </Step>
 </Steps>
 
-## The result
+## Your product is connected
 
-Your existing product is now reachable as an agent channel. Customers connect your MCP from an MCP-compatible client, authenticate with a customer key or with their existing account, and use the capabilities you registered against the same API that serves your app.
+Your existing product can now be used from supported AI clients through MCP. Customers connect using a customer key or their existing account, and their AI agents can discover and use the operations you have made available.
 
-If you issued an Agent Wallet, their agent can also pay for the operations that charge, within the controls you set.
+Your API continues to own your product and business logic. Mitu provides the agent-facing connection and sends requests to the API you already operate.
 
-## Next steps
+From here, you can make additional operations available, accept payments from AI agents or issue Agent Wallets that your customers' agents can use to make payments on their behalf.
+
+## Continue building
 
 <CardGroup cols={2}>
-  <Card title="MCP endpoints" icon="regular list-check" href="/platform/mcp/endpoints">
-    How endpoint definitions become the tools an agent sees.
+  <Card
+    title="MCP endpoints"
+    icon="regular list-check"
+    href="/platform/mcp/endpoints"
+  >
+    Learn how your API operations become tools that AI agents can discover and use.
   </Card>
-  <Card title="MCP authentication" icon="regular key" href="/platform/mcp/authentication">
-    Customer keys and OAuth, side by side.
+
+  <Card
+    title="MCP authentication"
+    icon="regular key"
+    href="/platform/mcp/authentication"
+  >
+    Learn how customer keys and OAuth work when customers connect from AI clients.
   </Card>
-  <Card title="Agent Wallets" icon="regular wallet" href="/platform/agent-wallets/overview">
-    Wallets you issue to customers, and what their agents may spend.
+
+  <Card
+    title="Accept payments from agents"
+    icon="regular credit-card"
+    href="/guides/integration-guides/accept-payment-from-agents"
+  >
+    Let AI agents pay while completing actions through your product.
   </Card>
-  <Card title="Accepting payment" icon="regular credit-card" href="/platform/payments/overview">
-    How paid endpoints, payment challenges and settlement work.
+
+  <Card
+    title="Issue wallets to customers"
+    icon="regular wallet"
+    href="/guides/integration-guides/issue-wallets-to-customers"
+  >
+    Give your customers Agent Wallets that their AI agents can use to make payments.
   </Card>
 </CardGroup>

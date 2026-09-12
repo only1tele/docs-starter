@@ -1,97 +1,94 @@
 ---
 title: Get set up with Mitu
-subtitle: A key, and your first authenticated request.
+subtitle: Create your API key and make your first authenticated request.
 ---
 
+Before you can use the Mitu API, you need an API key to authenticate requests from your server. This guide will help you create an API key, store it securely and confirm that your integration is working correctly.
+
+Once you have made your first successful request, you can continue setting up the parts of Mitu that your business needs. You can create customers, issue Agent Wallets, accept payments and configure webhooks as you build your integration.
+
 <Steps>
+  <Step title="Create an API key">
+    Sign in to the Mitu dashboard and open **API keys**. Create a new API key that your application can use to authenticate requests to the Mitu API.
 
-<Step title="Create an API key">
+    Your API key should only be used from a secure server environment. It gives your application access to your Mitu account and should be protected like any other sensitive credential.
 
-API keys are created from the dashboard, under **API keys**. They look like this:
+    <Warning title="Save your API key">
+      Your full API key is only shown when it is created, so copy it and store it securely before leaving the page. If you lose it or believe it has been compromised, create a new key and revoke the old one from the dashboard.
+    </Warning>
+  </Step>
 
-```text
-sk_live_…
-sk_test_…
-```
+  <Step title="Store your API key">
+    Store your API key in an environment variable or in the secrets manager used by your application. This keeps the key outside your source code while making it available to your server when it needs to make a request.
 
-<Warning title="The key is shown once">
-Only a hash and the visible prefix are stored, so a leaked database leaks no working keys, and nobody can reveal the full value again. Copy it when it is created and store it somewhere you would keep any other credential.
+    ```bash
+    export MITU_API_KEY="sk_test_…"
+    ```
 
-If you lose one, create another and revoke the old. Revocation takes effect immediately.
-</Warning>
+    <Warning title="Keep your API key server-side">
+      Do not commit your API key to source control or include it in code that runs in a browser or other client-side environment. Requests that use your API key should be made from a trusted server environment.
+    </Warning>
+  </Step>
 
-{/* SCREENSHOT: docs/assets/guides/quick-start/api-key-create.png
-     Caption: "Creating a key, and its one-time reveal." The key itself must
-     be a clearly non-production value. */}
+  <Step title="Make your first request">
+    Make a request to the `ping` endpoint to confirm that your API key is valid and that your application can connect to the Mitu API successfully.
 
-</Step>
+    ```bash title="Request"
+    curl --request GET \
+      --url https://api.mitu.ai/v1/ping \
+      --header "x-api-key: $MITU_API_KEY"
+    ```
 
-<Step title="Store it as an environment variable">
+    When the request is successful, the API returns information about the account associated with the key and the environment being used.
 
-```bash
-export MITU_API_KEY="sk_test_…"
-```
+    ```json title="200 OK"
+    {
+      "ok": true,
+      "account_id": "acc_8f21c4d9b7e3",
+      "api_key_id": "key_3a6f9d2a6bbc",
+      "environment": "test",
+      "scopes": []
+    }
+    ```
 
-Or wherever your application keeps configuration. Not in your source, and not in anything a browser or an AI client can read.
-
-</Step>
-
-<Step title="Make your first request">
-
-`ping` exists to answer one question, with no side effects: does this key work?
-
-```bash title="Request"
-curl --request GET \
-  --url https://api.mitu.ai/v1/ping \
-  --header "x-api-key: $MITU_API_KEY"
-```
-
-```json title="200 OK"
-{
-  "ok": true,
-  "account_id": "acc_8f21c4d9b7e3",
-  "api_key_id": "key_3a6f9d2a6bbc",
-  "environment": "test",
-  "scopes": []
-}
-```
-
-Reaching it at all proves the key was accepted. The body shows what it resolved to, so a `200` against the wrong account is distinguishable from a `200` against the right one. Check `account_id` is the account you meant.
-
-The call is recorded in your API logs like any other public request, which makes it the cheapest way to confirm logging is working too.
-
-</Step>
-
-<Step title="Understand test and live">
-
-```text
-sk_test_…   a test key
-sk_live_…   a live key
-```
-
-The environment travels with the key and comes back on `ping`, so you can always tell which one a request used.
-
-<Warning title="Test keys are not a separate sandbox">
-The environment is a property of the key rather than an isolated set of data. Do not assume resources created with a test key are invisible to a live one, or that payments made with it are simulated. Use a separate account if you need genuine isolation, and ask us if you are unsure which applies to a flow you are building.
-</Warning>
-
-</Step>
-
+    Check that the `account_id` and `environment` in the response match the account and environment you intended to use. If the request succeeds and the returned information is correct, your API key is configured properly and you can start making authenticated requests.
+  </Step>
 </Steps>
 
-## Next
+## You are ready to build
+
+Your API key is now configured and you have confirmed that your application can make authenticated requests. You can continue with the quick start guide that matches what you want to build next.
 
 <CardGroup cols={2}>
-  <Card title="Create your first customer" icon="regular user" href="/guides/quick-start/create-your-first-customer">
-    The record everything else hangs off.
+  <Card
+    title="Create your first customer"
+    icon="regular user"
+    href="/guides/quick-start/create-your-first-customer"
+  >
+    Create a customer and connect the customer to the corresponding user in your existing system.
   </Card>
-  <Card title="Issue your first wallet" icon="regular wallet" href="/guides/quick-start/issue-your-first-wallet">
-    A pot their agent can spend from.
+
+  <Card
+    title="Issue your first wallet"
+    icon="regular wallet"
+    href="/guides/quick-start/issue-your-first-wallet"
+  >
+    Issue an Agent Wallet that your customer's AI agents can use to make payments on their behalf.
   </Card>
-  <Card title="Accept your first payment" icon="regular credit-card" href="/guides/quick-start/accept-your-first-payment">
-    One charge, either kind of payer.
+
+  <Card
+    title="Accept your first payment"
+    icon="regular credit-card"
+    href="/guides/quick-start/accept-your-first-payment"
+  >
+    Create your first payment experience and receive a payment from a human or an AI agent.
   </Card>
-  <Card title="Configure webhooks" icon="regular bell" href="/guides/quick-start/configure-webhooks">
-    Find out what happened, reliably.
+
+  <Card
+    title="Configure webhooks"
+    icon="regular bell"
+    href="/guides/quick-start/configure-webhooks"
+  >
+    Configure webhooks so your application can receive events when activity occurs in your account.
   </Card>
 </CardGroup>

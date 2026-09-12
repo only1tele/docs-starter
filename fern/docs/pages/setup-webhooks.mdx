@@ -1,146 +1,163 @@
 ---
 title: Configure webhooks
-subtitle: Receive what happened, verified, and without applying it twice.
+subtitle: Receive events from Mitu and keep your application up to date.
 ---
 
-Webhooks are how your backend learns about payments, customers and wallet movement. In production they are the source of truth, not the dashboard and not what a browser or an AI client reported.
+Webhooks notify your application when activity occurs in your Mitu account. You can use them to respond to completed payments, wallet activity, new customers, subscriptions and other changes without repeatedly checking the API.
+
+Your webhook endpoint should verify each delivery before processing it and use the event ID to ensure that the same event is not processed more than once.
 
 <Steps>
+  <Step title="Create a webhook endpoint">
+    Create an HTTPS endpoint in your application that can receive `POST` requests from Mitu.
 
-<Step title="Create an endpoint">
+    In the Mitu dashboard, open **Webhooks** and add the URL of your endpoint. Your endpoint should be publicly accessible and return a successful response after it has accepted an event.
 
-In the dashboard, under **Webhooks**, add the URL Mitu should deliver to. It must be reachable over HTTPS and answer quickly.
+    ```text
+    https://example.com/webhooks/mitu
+    ```
+  </Step>
 
-{/* SCREENSHOT: docs/assets/guides/quick-start/webhook-create.png
-     Caption: "Adding a webhook endpoint and choosing its events." The secret
-     must be masked. */}
+  <Step title="Choose the events you need">
+    Select the events your application needs to receive. You do not need to subscribe to events that your application does not use.
 
-</Step>
+    | Resource | Available events |
+    | --- | --- |
+    | Payments | `payment.completed`, `payment.failed` |
+    | Payment links | `link.created`, `link.viewed` |
+    | Customers | `customer.created` |
+    | Wallets | `wallet.created`, `wallet.credited`, `wallet.debited` |
+    | Invoices | `invoice.created`, `invoice.sent`, `invoice.viewed`, `invoice.paid`, `invoice.overdue` |
+    | Subscriptions | `plan.created`, `subscription.created`, `subscription.charged`, `subscription.past_due`, `subscription.cancelled` |
+    | Sessions | `session.opened`, `session.closed` |
 
-<Step title="Choose events">
+    Payment events describe payments received by your business. Wallet events describe activity on Agent Wallets that you have issued to your customers.
 
-Subscribe to what you will act on, rather than everything.
+    Choose events based on the actions your application needs to take. For example, an application that fulfils an order after payment may only need `payment.completed` for that workflow.
+  </Step>
 
-```text
-Being paid      payment.completed, payment.failed
-Payment links   link.created, link.viewed
-Customers       customer.created
-Wallets         wallet.created, wallet.credited, wallet.debited
-Invoices        invoice.created, invoice.sent, invoice.paid
-Subscriptions   plan.created, subscription.created, .charged,
-                .past_due, .cancelled
-Sessions        session.opened, session.closed
-```
+  <Step title="Store your webhook secret">
+    Each webhook endpoint has its own signing secret. Store this secret securely in your application.
 
-`payment.*` means you are being paid. `wallet.*` belongs to wallets you issue, where the money is your customer's and you are the operator. A merchant may run either or both.
+    ```text
+    whsec_…
+    ```
 
-<Note title="Some declared events are never sent">
-`invoice.viewed`, `invoice.overdue`, `refund.completed`, `settlement.completed` and `customer.status.changed` exist as types but nothing raises them today. Subscribing to one is harmless; waiting on one is a flow that never runs.
-</Note>
+    The webhook secret is used to verify that webhook deliveries were sent by Mitu.
 
-</Step>
+    <Warning title="Use the correct secret">
+      Your webhook secret is different from the signing secret used to verify requests sent to your API during agent interactions.
 
-<Step title="Store the secret">
+      Use the `whsec_…` secret to verify webhook deliveries. Use the `mps_…` signing secret when verifying signed requests sent to your API.
+    </Warning>
+  </Step>
 
-Each endpoint gets its own secret.
+  <Step title="Verify each delivery">
+    Webhook requests include a signature that your application should verify before processing the event.
 
-```text
-whsec_…
-```
+    ```http
+    Content-Type: application/json
+    X-Mitu-Signature: v1,t=1788990420,sig=<hmac-sha256>
+    ```
 
-<Warning title="Not the same as your signing secret">
-`whsec_…` signs deliveries Mitu sends **to you**. `mps_…` signs requests Mitu forwards to your API on an agent's behalf. They sign opposite directions, and verifying with the wrong one fails every delivery, which usually gets diagnosed as a delivery problem rather than a key problem.
-</Warning>
+    Verify the signature using the webhook secret associated with the endpoint that received the request. Perform verification before trusting or acting on any information in the event.
 
-Each endpoint's deliveries must be verified with that endpoint's own secret.
+    Keep the original request body available until verification is complete. Changing the body before verification can cause signature validation to fail.
 
-</Step>
+    Your implementation should also validate the timestamp included with the signature and use a timing safe comparison when comparing signatures.
 
-<Step title="Verify the signature">
+    Learn more about the verification process in [Webhooks](/platform/webhooks/overview).
+  </Step>
 
-```http
-Content-Type: application/json
-X-Mitu-Signature: v1,t=1788990420,sig=<hmac-sha256>
-```
+  <Step title="Process the event">
+    Every webhook follows a common event structure.
 
-Verify before you act on anything in the body. Keep the raw bytes: parsing JSON and re-encoding it changes key order and whitespace, and the comparison then fails. Use a timing-safe compare, and reject a timestamp outside a few minutes so a captured delivery cannot be replayed later.
+    ```json title="Webhook event"
+    {
+      "event": "payment.completed",
+      "event_id": "evt_a8f1zq5xkm2lcn6f",
+      "event_created_at": "2026-09-09T14:22:57.003Z",
+      "event_data": {}
+    }
+    ```
 
-</Step>
+    | Field | Description |
+    | --- | --- |
+    | `event` | Identifies the type of activity that occurred. |
+    | `event_id` | Uniquely identifies the event and can be used to prevent duplicate processing. |
+    | `event_created_at` | Identifies when the event was created. |
+    | `event_data` | Contains the information associated with the event. |
 
-<Step title="Handle the envelope">
+    The contents of `event_data` depend on the event type. See [Events](/platform/webhooks/events) for the fields available for each event.
+  </Step>
 
-Every event has the same shape:
+  <Step title="Prevent duplicate processing">
+    Store the `event_id` after processing an event successfully. If your endpoint receives the same `event_id` again, acknowledge the request without applying the same change again.
 
-```json
-{
-  "event": "payment.completed",
-  "event_id": "evt_a8f1zq5xkm2lcn6f",
-  "event_created_at": "2026-09-09T14:22:57.003Z",
-  "event_data": { }
-}
-```
+    This is important because webhook deliveries can be retried. Multiple deliveries with the same `event_id` represent the same event and should not create duplicate changes in your application.
 
-Only the fields that apply are sent. On payment events, `source` tells you which shape to expect: one from a link carries no `service_id`, one from an MCP endpoint carries no `payment_link_id`.
+    Your endpoint should return a `2xx` response after it has successfully accepted the event. Responses outside the `2xx` range are treated as unsuccessful deliveries and may be retried.
 
-Anything naming a customer carries both ids: `customer_id` is Mitu's, `customer_ref` is yours.
+    Mitu attempts unsuccessful webhook deliveries up to five times with backoff. If all delivery attempts fail, you can inspect the delivery and resend it from the dashboard.
+  </Step>
 
-</Step>
+  <Step title="Test your endpoint">
+    Use the **Test** action in the dashboard to send a webhook to your configured endpoint. Test deliveries use the same delivery process as other webhook events and appear in your webhook logs.
 
-<Step title="Deduplicate, then acknowledge">
+    Check that your endpoint receives the request, verifies the signature, processes the event and returns a successful response.
 
-```text
-Receive
-  |
-Verify with this endpoint's whsec_
-  |
-Seen this event_id? Acknowledge and stop
-  |
-Apply the change
-  |
-Answer 2xx
-```
-
-Mitu attempts a delivery up to five times with backoff, and **every attempt carries the same `event_id`**, because a retry is the same event arriving again rather than a new one. Deduplicating on it is the only thing stopping one payment being applied twice.
-
-Answer `2xx` to acknowledge. Anything else counts as a failure and is retried; after the last attempt the delivery is abandoned and you can resend it by hand.
-
-</Step>
-
-<Step title="Test it">
-
-The Test button sends a real delivery, recorded in the log like any other, so what you test is what production sends.
-
-Every attempt is logged with its status and response, so a delivery that failed can be inspected rather than guessed at.
-
-</Step>
-
+    You can use the webhook logs to inspect delivery attempts and troubleshoot unsuccessful responses before relying on the endpoint in production.
+  </Step>
 </Steps>
 
-## What to do with the common ones
+## Common webhook events
 
-```text
-payment.completed   mark your record paid, using reference
-payment.failed      read reason: not all of them are worth a retry
-wallet.credited     tell the customer their wallet is ready
-wallet.debited      record the movement; check delivered
-customer.created    store the mapping, especially from an OAuth sign-in
-```
+The events you handle depend on the products you use and how your application responds to activity.
 
-`delivered: false` on a payment or wallet event means the money moved and your endpoint did not serve the call. That is money owed rather than revenue. See [paid but not delivered](/platform/payments/agent-payments).
+| Event | Common use |
+| --- | --- |
+| `payment.completed` | Confirm that a payment has completed and update the corresponding record in your system. |
+| `payment.failed` | Record an unsuccessful payment attempt and determine whether another attempt is needed. |
+| `wallet.credited` | Update your application when funds are added to a customer's Agent Wallet. |
+| `wallet.debited` | Update your application when funds are spent from a customer's Agent Wallet. |
+| `customer.created` | Associate a newly created customer with the corresponding customer in your system. |
 
-## Next
+For the complete list of events and their payloads, see [Events](/platform/webhooks/events).
+
+## Continue building
+
+Your application can now receive changes as they happen. Continue with the detailed webhook documentation or move on to the integration guide that matches what you want to build.
 
 <CardGroup cols={2}>
-  <Card title="Events" icon="regular bell" href="/platform/webhooks/events">
-    Every event and its full payload.
+  <Card
+    title="Events"
+    icon="regular bell"
+    href="/platform/webhooks/events"
+  >
+    Review the events available for each resource and the data included with them.
   </Card>
-  <Card title="Webhooks" icon="regular arrows-rotate" href="/platform/webhooks/overview">
-    Signing, delivery and retries in depth.
+
+  <Card
+    title="Webhooks"
+    icon="regular arrows-rotate"
+    href="/platform/webhooks/overview"
+  >
+    Learn more about webhook verification, delivery behaviour and retries.
   </Card>
-  <Card title="Connect to AI agents" icon="regular plug" href="/guides/integration-guides/connect-to-ai-agents">
-    Put your product in front of agents.
+
+  <Card
+    title="Connect to AI agents"
+    icon="regular plug"
+    href="/guides/integration-guides/connect-to-ai-agents"
+  >
+    Connect your existing products, services and APIs to supported AI clients.
   </Card>
-  <Card title="Accept payments from agents" icon="regular credit-card" href="/guides/integration-guides/accept-payment-from-agents">
-    Charge for an operation.
+
+  <Card
+    title="Accept payments from agents"
+    icon="regular credit-card"
+    href="/guides/integration-guides/accept-payment-from-agents"
+  >
+    Let AI agents pay while completing actions through your product.
   </Card>
 </CardGroup>

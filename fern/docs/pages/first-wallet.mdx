@@ -1,137 +1,150 @@
 ---
 title: Issue your first wallet
-subtitle: A pot your customer funds and their agent can spend from, within limits you set.
+subtitle: Issue an Agent Wallet that your customer's AI agents can use to make payments on their behalf.
 ---
 
-You need a customer. If you have not made one, [create your first customer](/guides/quick-start/create-your-first-customer) takes a minute.
+Agent Wallets let you give your customers wallets that their AI agents can spend from. You decide which customer the wallet belongs to and configure the spending controls that apply when their agents make payments.
 
-<Note title="Not every business needs wallets">
-Agent Wallets are for giving your own customers controlled spending power. If you only want agents to pay you, skip this and go to [accept your first payment](/guides/quick-start/accept-your-first-payment).
+You need an existing customer before you can issue a wallet. If you have not created one yet, follow [Create your first customer](/guides/quick-start/create-your-first-customer) first.
+
+<Note title="When to use Agent Wallets">
+  Use Agent Wallets when you want your customers' AI agents to make payments on their behalf. If you only want to accept payments from AI agents, you do not need to issue wallets. Continue to [Accept your first payment](/guides/quick-start/accept-your-first-payment) instead.
 </Note>
 
 <Steps>
+  <Step title="Create an Agent Wallet">
+    Create a wallet for the customer and give it a name that describes what it will be used for. You can also configure spending controls when you create the wallet.
 
-<Step title="Create the wallet">
+    ```bash title="Request"
+    curl --request POST \
+      --url https://api.mitu.ai/v1/customers/cus_ds9hazr8jd3l/wallets \
+      --header "x-api-key: $MITU_API_KEY" \
+      --header "Content-Type: application/json" \
+      --data '{
+        "name": "Travel",
+        "limits": {
+          "per_payment": 250,
+          "monthly": 2000,
+          "approve_above": 150
+        }
+      }'
+    ```
 
-```bash title="Request"
-curl --request POST \
-  --url https://api.mitu.ai/v1/customers/cus_ds9hazr8jd3l/wallets \
-  --header "x-api-key: $MITU_API_KEY" \
-  --header "Content-Type: application/json" \
-  --data '{
-    "name": "Travel",
-    "limits": { "per_payment": 250, "monthly": 2000, "approve_above": 150 }
-  }'
-```
+    A successful request returns the wallet, its spending controls and the addresses that can be used to fund it.
 
-```json title="201 Created"
-{
-  "id": "wal_fc2ff966abc04de09c22",
-  "customer_id": "cus_ds9hazr8jd3l",
-  "name": "Travel",
-  "currency": "USDC",
-  "limits": {
-    "per_payment": 250,
-    "monthly": 2000,
-    "approve_above": 150,
-    "currency": "USD"
-  },
-  "addresses": [
-    { "network": "base",   "address": "0xd7Ca1fdA…" },
-    { "network": "tempo",  "address": "0xd7Ca1fdA…" },
-    { "network": "solana", "address": "3c6SpTNK…" }
-  ],
-  "created_at": "2026-09-11T15:01:32.760Z"
-}
-```
+    ```json title="201 Created"
+    {
+      "id": "wal_fc2ff966abc04de09c22",
+      "customer_id": "cus_ds9hazr8jd3l",
+      "name": "Travel",
+      "currency": "USDC",
+      "limits": {
+        "per_payment": 250,
+        "monthly": 2000,
+        "approve_above": 150,
+        "currency": "USD"
+      },
+      "addresses": [
+        {
+          "network": "base",
+          "address": "0xd7Ca1fdA…"
+        },
+        {
+          "network": "tempo",
+          "address": "0xd7Ca1fdA…"
+        },
+        {
+          "network": "solana",
+          "address": "3c6SpTNK…"
+        }
+      ],
+      "created_at": "2026-09-11T15:01:32.760Z"
+    }
+    ```
 
-Name it for its purpose. The name is what the customer says out loud and what their agent passes, so `Travel` and `Office` work where `Wallet 1` does not. Names are unique per customer, and creating the same name again returns the wallet that already exists, which makes the call safe to retry.
+    Choose a name that makes the purpose of the wallet easy for the customer and their AI agents to understand. A customer can have multiple wallets for different purposes.
 
-</Step>
+    Wallet names are unique for each customer. If you create another wallet with the same name for the same customer, the existing wallet is returned.
+  </Step>
 
-<Step title="Understand the limits">
+  <Step title="Configure spending controls">
+    Spending controls determine how the wallet can be used when an AI agent makes a payment on behalf of the customer.
 
-All three are USD, while the balance is USDC. That is why the limits object names its own currency.
+    | Control | Description |
+    | --- | --- |
+    | `per_payment` | Sets the amount the wallet can spend on an individual payment. |
+    | `monthly` | Sets the amount the wallet can spend during a calendar month. |
+    | `approve_above` | Sets the amount above which the customer must approve a payment. |
 
-```text
-monthly         the most this wallet may spend in a calendar month
-per_payment     the intended ceiling for a single payment
-approve_above   the intended threshold where the customer is asked
-```
+    The limits are expressed in USD while the wallet balance is held in USDC.
 
-A limit you omit is inherited from the limits that customer already has. **Omitted does not mean unlimited**, and zero means no limit rather than a ceiling of zero.
+    If you do not provide a limit when creating the wallet, the wallet inherits the corresponding limit configured for the customer. A value of `0` represents no limit.
 
-<Warning title="Only the monthly limit currently gates a payment">
-A payment that would take the wallet past `monthly` is held for the customer to approve rather than settling. `per_payment` and `approve_above` are stored and returned but are not yet read by the payment path, so do not present either to your customers as an enforced control.
-</Warning>
+    <Warning title="Check which controls are currently enforced">
+      The availability and enforcement of individual spending controls can depend on the payment flow you are using. Do not present a control to customers as enforced until it is supported by the payment path you have integrated.
+    </Warning>
+  </Step>
 
-</Step>
+  <Step title="Fund the wallet">
+    The customer needs to fund the wallet before their AI agents can use it to make payments.
 
-<Step title="Fund it">
+    The wallet response contains an address for each supported network. When funding with stablecoins, send USDC to the address associated with the network being used.
 
-The customer sends USDC to the wallet's address on a network it supports. Deposits are detected on chain and credited automatically.
+    <Warning title="Always show the network">
+      Always present the wallet address together with its network. An address alone is not enough to determine where funds should be sent.
+    </Warning>
 
-<Warning title="Show the address with its network">
-Base and Tempo share the EVM address. Solana's is different, and funds sent to the wrong chain are not recoverable. Present the pair, never a single bare address.
-</Warning>
+    Agent Wallets can also support funding through local bank transfers where available. The funding options available to a customer depend on the currencies and funding methods supported for their account.
 
-Only the create response carries the addresses. The wallet list returns names and limits without them.
+    Learn more about the available funding methods in [Funding Agent Wallets](/platform/agent-wallets/funding).
+  </Step>
 
-</Step>
+  <Step title="Confirm the wallet is funded">
+    When funds are credited to the wallet, a `wallet.credited` event is created. You can use this event to update your application when the customer's wallet balance changes.
 
-<Step title="Confirm it was credited">
+    ```json title="wallet.credited"
+    {
+      "event": "wallet.credited",
+      "event_data": {
+        "wallet_id": "wal_fc2ff966abc04de09c22",
+        "amount": "50.000000",
+        "currency": "USDC",
+        "network": "base",
+        "balance_after": "50.000000"
+      }
+    }
+    ```
 
-`wallet.credited` fires when a deposit lands, carrying the amount, the network, the `tx_hash` and `balance_after` for that wallet alone.
+    You can also retrieve the customer's wallets through the API.
 
-```json
-{
-  "event": "wallet.credited",
-  "event_data": {
-    "wallet_id": "wal_fc2ff966abc04de09c22",
-    "amount": "50.000000",
-    "currency": "USDC",
-    "network": "base",
-    "balance_after": "50.000000"
-  }
-}
-```
+    ```bash title="Request"
+    curl --request GET \
+      --url https://api.mitu.ai/v1/customers/cus_ds9hazr8jd3l/wallets \
+      --header "x-api-key: $MITU_API_KEY"
+    ```
 
-You can also read the customer's wallets back:
-
-```bash
-curl --request GET \
-  --url https://api.mitu.ai/v1/customers/cus_ds9hazr8jd3l/wallets \
-  --header "x-api-key: $MITU_API_KEY"
-```
-
-</Step>
-
-<Step title="See what the agent gets">
-
-Once the customer connects an AI client and Mitu knows who they are, four tools appear:
-
-```text
-list_wallets()                      the names they hold
-get_balance({ wallet? })            a balance, or all of them
-get_address({ wallet? })            where to fund one, labelled by chain
-pay({ endpoint, method?, body?, wallet? })
-```
-
-The agent can read and it can pay. It cannot create a wallet, move money between wallets, withdraw, change a limit, or spend from a wallet it was not given.
-
-With several wallets it must name one to pay from, and is refused with the names listed rather than allowed to guess.
-
-</Step>
-
+    Once the wallet has a balance, the customer's AI agents can use it to make supported payments after the customer connects through an AI client.
+  </Step>
 </Steps>
 
-## Next
+## You have issued your first Agent Wallet
+
+The customer now has an Agent Wallet that can be funded and used by their AI agents within the spending controls you have configured.
 
 <CardGroup cols={2}>
-  <Card title="Accept your first payment" icon="regular credit-card" href="/guides/quick-start/accept-your-first-payment">
-    One charge, either kind of payer.
+  <Card
+    title="Accept your first payment"
+    icon="regular credit-card"
+    href="/guides/quick-start/accept-your-first-payment"
+  >
+    Create a payment experience and receive your first payment.
   </Card>
-  <Card title="Issue wallets to customers" icon="regular wallet" href="/guides/integration-guides/issue-wallets-to-customers">
-    The full implementation guide.
+
+  <Card
+    title="Issue wallets to customers"
+    icon="regular wallet"
+    href="/guides/integration-guides/issue-wallets-to-customers"
+  >
+    Learn how to issue, fund and manage Agent Wallets for your customers.
   </Card>
 </CardGroup>

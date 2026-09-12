@@ -1,111 +1,110 @@
 ---
 title: Accept your first payment
-subtitle: Create one charge, and let a person or an agent settle it.
+subtitle: Create a payment that can be completed by a human or an AI agent.
 ---
 
+Mitu payment links let you create a payment that can be completed by either a human or an AI agent. You create the payment once and receive separate payment URLs for each type of payer.
+
+Both payment flows represent the same payment, which means you can use the same reference to track the payment in your system regardless of how it is completed.
+
 <Steps>
+  <Step title="Create a payment">
+    Create a one-time payment and include a reference that identifies the corresponding order, purchase or transaction in your own system.
 
-<Step title="Create the payment">
+    ```bash title="Request"
+    curl --request POST \
+      --url https://api.mitu.ai/v1/payment-links \
+      --header "x-api-key: $MITU_API_KEY" \
+      --header "Content-Type: application/json" \
+      --data '{
+        "type": "charge",
+        "amount": 25.00,
+        "currency": "USD",
+        "description": "Invoice 8841",
+        "reference": "ORDER-8841",
+        "paymentMethods": ["x402", "mpp_spt"]
+      }'
+    ```
 
-```bash title="Request"
-curl --request POST \
-  --url https://api.mitu.ai/v1/payment-links \
-  --header "x-api-key: $MITU_API_KEY" \
-  --header "Content-Type: application/json" \
-  --data '{
-    "type": "charge",
-    "amount": 25.00,
-    "currency": "USD",
-    "description": "Invoice 8841",
-    "reference": "ORDER-8841",
-    "paymentMethods": ["x402", "mpp_spt"]
-  }'
-```
+    The `reference` should contain an identifier that your application already understands. When payment activity is reported, you can use this value to associate the payment with the corresponding record in your system.
 
-Set `reference` to something your own system already knows. It comes back on the payment event, which is what lets you reconcile without storing Mitu's id. It costs nothing now and is awkward to retrofit.
+    The `paymentMethods` field determines which supported payment methods an AI agent can use to complete the payment.
+  </Step>
 
-`paymentMethods` constrains what an agent may settle with. Offering more than one costs nothing and widens who can pay you.
+  <Step title="Use the payment URLs">
+    The payment provides separate URLs for humans and AI agents. Both URLs belong to the same payment and use the same amount, currency and reference.
 
-</Step>
+    ```json title="Payment URLs"
+    {
+      "payment_link_id": "pay_n8d7piu1yc6h",
+      "amount": "25.00",
+      "currency": "USD",
+      "reference": "ORDER-8841",
+      "url": {
+        "checkout": "https://mitu.ai/pay/pay_n8d7piu1yc6h",
+        "agent": "https://api.mitu.ai/pay/pay_n8d7piu1yc6h"
+      }
+    }
+    ```
 
-<Step title="Take both entry points">
+    | URL | When to use it |
+    | --- | --- |
+    | `url.checkout` | Use this URL when a human will complete the payment through checkout. |
+    | `url.agent` | Use this URL when an AI agent will complete the payment programmatically. |
 
-The response carries `checkoutUrl`. Both URLs arrive together on `link.created`:
+    You do not need to choose the type of payer when you create the payment. You can provide the appropriate URL depending on how the customer is completing the transaction.
 
-```json
-{
-  "payment_link_id": "pay_n8d7piu1yc6h",
-  "amount": "25.00",
-  "currency": "USD",
-  "reference": "ORDER-8841",
-  "url": {
-    "checkout": "https://mitu.ai/pay/pay_n8d7piu1yc6h",
-    "agent": "https://api.mitu.ai/pay/pay_n8d7piu1yc6h"
-  }
-}
-```
+    <Note title="Agent payments">
+      The agent URL returns the payment requirements that an AI agent needs to complete the payment. Mitu handles the supported agent payment protocols and confirms the payment before reporting it as completed.
+    </Note>
+  </Step>
 
-</Step>
+  <Step title="Confirm the payment">
+    Use payment events to determine when the payment has been completed. A `payment.completed` event confirms that the payment was successful.
 
-<Step title="Choose how the payer pays">
+    The event includes the reference you provided when creating the payment. Use this reference to find the corresponding order or transaction in your system and update its payment status.
 
-```text
-A person   opens the checkout URL and pays with what is available to them
-An agent   calls the agent URL, gets a 402, and settles it programmatically
-```
+    | Event | What it means |
+    | --- | --- |
+    | `link.created` | The payment link was created. |
+    | `link.viewed` | A human opened the checkout page. |
+    | `payment.completed` | The payment was completed successfully. |
+    | `payment.failed` | A payment attempt did not complete successfully. |
 
-You do not have to decide in advance which it will be. Send the checkout URL by email or SMS, hand the agent URL to an assistant, or both.
+    The `link.viewed` event applies to the human checkout experience and should not be used to determine whether an AI agent has started a payment.
 
-<Warning title="The two URLs are not interchangeable">
-The checkout is a page. The agent URL answers a payment requirement. Give an agent the checkout URL and it gets HTML where it expected a challenge.
-</Warning>
+    <Warning title="Confirm payments from a trusted source">
+      Do not mark an order as paid based on a browser redirect or information returned by an AI client. Use a verified `payment.completed` webhook or retrieve the payment status from the API before updating your system.
+    </Warning>
+  </Step>
 
-Nothing about the agent protocols is your problem. Mitu handles settlement underneath.
+  <Step title="Receive your funds">
+    Funds from completed payments are added to your Mitu balance. The way the payment was completed does not change how the funds are made available to your business.
 
-</Step>
+    You can settle your available balance to a supported bank account or withdraw stablecoins to an onchain address.
 
-<Step title="Reconcile">
-
-```text
-payment.completed  ->  reference: ORDER-8841  ->  your row  ->  mark it paid
-```
-
-Your handler does not branch on who paid.
-
-Do not mark anything paid from the payer's browser, or from what an AI client reported. Use the verified webhook, or read the state back from the API. On the agent path there is no browser to return from at all.
-
-</Step>
-
-<Step title="Know when it is paid">
-
-```text
-link.created        you made it
-link.viewed         somebody opened the checkout page
-payment.completed   it was paid
-payment.failed      an attempt did not complete, with a reason
-```
-
-`link.viewed` comes from the checkout page being opened, so do not read it as a general signal of interest covering the agent path.
-
-[Configure webhooks](/guides/quick-start/configure-webhooks) is the next page, and is how you receive these in production.
-
-</Step>
-
-<Step title="Where the money goes">
-
-Into your Mitu balance as USDC, whoever paid and however. From there you settle in local currency to your bank account or withdraw the stablecoin on chain. How somebody paid has no bearing on how you take it out.
-
-</Step>
-
+    Learn more about [Settlement](/platform/payments/settlement).
+  </Step>
 </Steps>
 
-## Next
+## Continue building
+
+Configure webhooks so your application can receive payment events automatically, or continue to the payment experiences guide to build other payment flows.
 
 <CardGroup cols={2}>
-  <Card title="Configure webhooks" icon="regular bell" href="/guides/quick-start/configure-webhooks">
-    Receive payment state reliably.
+  <Card
+    title="Configure webhooks"
+    icon="regular bell"
+    href="/guides/quick-start/configure-webhooks"
+  >
+    Configure your application to receive and process payment events.
   </Card>
-  <Card title="Create payment experiences" icon="regular link" href="/guides/integration-guides/create-payment-experiences">
-    Invoices, subscriptions and sessions.
+
+  <Card
+    title="Create payment experiences"
+    icon="regular link"
+    href="/guides/integration-guides/create-payment-experiences"
+  >
+    Learn how to create one-time payments, payment links, invoices and subscriptions.
   </Card>
 </CardGroup>

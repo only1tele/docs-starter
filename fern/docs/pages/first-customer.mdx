@@ -1,105 +1,116 @@
 ---
 title: Create your first customer
-subtitle: The record that lets a wallet belong to somebody and an event name who it is about.
+subtitle: Create a customer and connect them to the corresponding user in your existing system.
 ---
 
-<Steps>
+Customers represent the people who use your product. Creating a customer gives you a record that you can use across Agent Wallets, MCP access, payments and events.
 
-<Step title="Create the customer">
+<Note title="Creating customers with OAuth">
+  If your product uses OAuth, you do not need to create the customer before they connect. When the customer signs in for the first time, their identity can be used to create or associate their customer record automatically.
 
-```bash title="Request"
-curl --request POST \
-  --url https://api.mitu.ai/v1/customers \
-  --header "x-api-key: $MITU_API_KEY" \
-  --header "Idempotency-Key: customer-your_user_8841" \
-  --header "Content-Type: application/json" \
-  --data '{
-    "client_reference_id": "your_user_8841",
-    "first_name": "Ada",
-    "last_name": "Obi",
-    "email": "ada@example.com",
-    "phone": "+2348099887766"
-  }'
-```
-
-```json title="201 Created"
-{
-  "id": "cus_ds9hazr8jd3l",
-  "client_reference_id": "your_user_8841",
-  "first_name": "Ada",
-  "last_name": "Obi",
-  "email": "ada@example.com",
-  "phone": "+2348099887766",
-  "key": "mcpk_3a6f9d2a6bbc816b11d524fe052b26b7e75fb7b5fa7a1a7d",
-  "mcp_url": "https://mcp.yourdomain.com/mcp",
-  "created_at": "2026-09-11T15:00:34.915Z"
-}
-```
-
-</Step>
-
-<Step title="Save what matters">
-
-<ParamField path="id" type="string">
-  `cus_…`. You need it to act on the customer later, such as issuing them a wallet.
-</ParamField>
-
-<ParamField path="client_reference_id" type="string">
-  Your own identifier. It comes back on every event as `customer_ref` and on every forwarded request as `x-mitu-customer-ref`, so you can resolve a request to your own row without storing Mitu's id.
-</ParamField>
-
-<ParamField path="key" type="string">
-  The customer's MCP key, **returned once**. Capture it here if the customer will connect with a key rather than by signing in. Only a hash is stored.
-</ParamField>
-
-<ParamField path="mcp_url" type="string">
-  Where their AI client connects.
-</ParamField>
-
-Store the pairing both ways: `your_user_8841 <-> cus_ds9hazr8jd3l`. Do not store the key; it is the customer's credential, not yours.
-
-</Step>
-
-<Step title="Understand idempotency">
-
-```text
-Same key, same body, within 24 hours   the original response, byte for byte
-Same key, different body               409
-```
-
-A `409` means something changed between your attempts, not that a retry failed. The key is remembered only after the work succeeded, so a failed creation does not replay as a success.
-
-`client_reference_id` is a second safety net: the same reference always resolves to the same customer, so even a retry without an idempotency key will not create a duplicate.
-
-</Step>
-
-<Step title="Read it back">
-
-```bash
-curl --request GET \
-  --url "https://api.mitu.ai/v1/customers?limit=20" \
-  --header "x-api-key: $MITU_API_KEY"
-```
-
-```text
-GET /v1/customers/{id}   one customer
-```
-
-</Step>
-
-</Steps>
-
-<Note title="Customers can also arrive by sign-in">
-If you run your own OAuth, Mitu creates the customer the first time somebody signs in, from their `sub`, and tells you through `customer.created`. You do not call this endpoint first in that flow. See [connect customer accounts](/guides/integration-guides/connect-customer-accounts).
+  Learn more in [Connect customer accounts](/guides/integration-guides/connect-customer-accounts).
 </Note>
 
-## Next
+Use `client_reference_id` to connect the customer to the corresponding user in your own system. This lets you keep your existing customer model while using Mitu for agent and payment experiences.
+
+<Steps>
+  <Step title="Create a customer">
+    Send a request with the customer information you want to store. Set `client_reference_id` to the identifier you already use for the customer in your own system.
+
+    ```bash title="Request"
+    curl --request POST \
+      --url https://api.mitu.ai/v1/customers \
+      --header "x-api-key: $MITU_API_KEY" \
+      --header "Idempotency-Key: customer-your_user_8841" \
+      --header "Content-Type: application/json" \
+      --data '{
+        "client_reference_id": "your_user_8841",
+        "first_name": "Ada",
+        "last_name": "Obi",
+        "email": "ada@example.com",
+        "phone": "+2348099887766"
+      }'
+    ```
+
+    A successful request creates the customer and returns their customer ID, reference, MCP credentials and other customer information.
+
+    ```json title="201 Created"
+    {
+      "id": "cus_ds9hazr8jd3l",
+      "client_reference_id": "your_user_8841",
+      "first_name": "Ada",
+      "last_name": "Obi",
+      "email": "ada@example.com",
+      "phone": "+2348099887766",
+      "key": "mcpk_3a6f9d2a6bbc816b11d524fe052b26b7e75fb7b5fa7a1a7d",
+      "mcp_url": "https://mcp.yourdomain.com/mcp",
+      "created_at": "2026-09-11T15:00:34.915Z"
+    }
+    ```
+  </Step>
+
+  <Step title="Save the customer">
+    Keep the customer ID and your own customer reference together so you can identify the same customer across both systems.
+
+    | Field | Description |
+    | --- | --- |
+    | `id` | The Mitu customer ID. Use this when making API requests for the customer, such as issuing an Agent Wallet. |
+    | `client_reference_id` | The customer identifier from your own system. It is included in customer related activity so you can associate it with your existing customer record. |
+    | `key` | The customer's MCP key. It is returned only when it is created and can be used when the customer connects to MCP using a key instead of OAuth. |
+    | `mcp_url` | The MCP URL that the customer can connect to from a supported AI client. |
+
+    Store the `id` alongside the corresponding customer in your system. For this example, `cus_ds9hazr8jd3l` belongs to the customer identified as `your_user_8841`.
+
+    <Warning title="Customer MCP keys">
+      The `key` belongs to the customer and should not be stored as a merchant credential. If you provide the key to the customer, treat it as a sensitive credential and only deliver it through a secure flow.
+    </Warning>
+  </Step>
+
+  <Step title="Handle retries safely">
+    Include an `Idempotency-Key` when creating a customer. This allows you to retry the request without accidentally creating the customer more than once.
+
+    When the same idempotency key is used with the same request, the original successful response is returned. If the same key is reused with different request data, the API returns a `409` response.
+
+    The `client_reference_id` also identifies the customer using the identifier from your own system. Reusing the same reference resolves to the same customer rather than creating another customer.
+  </Step>
+
+  <Step title="Retrieve the customer">
+    You can retrieve customers later using the API. The following request returns customers associated with your account.
+
+    ```bash title="Request"
+    curl --request GET \
+      --url "https://api.mitu.ai/v1/customers?limit=20" \
+      --header "x-api-key: $MITU_API_KEY"
+    ```
+
+    To retrieve a specific customer, use their customer ID.
+
+    ```bash title="Request"
+    curl --request GET \
+      --url https://api.mitu.ai/v1/customers/cus_ds9hazr8jd3l \
+      --header "x-api-key: $MITU_API_KEY"
+    ```
+  </Step>
+</Steps>
+
+## Continue building
+
+Now that you have created a customer, you can issue an Agent Wallet or learn how existing customer accounts can connect to AI clients.
 
 <CardGroup cols={2}>
-  <Card title="Issue your first wallet" icon="regular wallet" href="/guides/quick-start/issue-your-first-wallet">
-    Give this customer a pot to spend from.
+  <Card
+    title="Issue your first wallet"
+    icon="regular wallet"
+    href="/guides/quick-start/issue-your-first-wallet"
+  >
+    Issue an Agent Wallet that the customer's AI agents can use to make payments on their behalf.
   </Card>
-  <Card title="Connect customer accounts" icon="regular key" href="/guides/integration-guides/connect-customer-accounts">
-    Keys and OAuth, in full.
+
+  <Card
+    title="Connect customer accounts"
+    icon="regular key"
+    href="/guides/integration-guides/connect-customer-accounts"
+  >
+    Learn how customers can connect using customer keys or your existing OAuth sign in flow.
   </Card>
 </CardGroup>

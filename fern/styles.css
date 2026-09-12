@@ -592,3 +592,17 @@ a.mitu-link p {
   line-height: 1;
   color: inherit;
 }
+
+/* Overview capabilities. Each stands on its own, so they need more air between
+   them than an article's headings would normally get, and a clear break before
+   whatever follows the group. */
+.mitu-caps > h3 {
+  margin-top: 56px;
+}
+.mitu-caps > h3:first-child {
+  margin-top: 28px;
+}
+.mitu-next {
+  margin-top: 64px;
+  border-top: 1px solid var(--mitu-line);
+}
