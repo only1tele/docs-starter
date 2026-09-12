@@ -1,6 +1,146 @@
 ---
 title: Configure webhooks
-subtitle: Receive and verify events.
+subtitle: Receive what happened, verified, and without applying it twice.
 ---
 
-<Note>This page is being written. See the platform guide for the source material.</Note>
+Webhooks are how your backend learns about payments, customers and wallet movement. In production they are the source of truth, not the dashboard and not what a browser or an AI client reported.
+
+<Steps>
+
+<Step title="Create an endpoint">
+
+In the dashboard, under **Webhooks**, add the URL Mitu should deliver to. It must be reachable over HTTPS and answer quickly.
+
+{/* SCREENSHOT: docs/assets/guides/quick-start/webhook-create.png
+     Caption: "Adding a webhook endpoint and choosing its events." The secret
+     must be masked. */}
+
+</Step>
+
+<Step title="Choose events">
+
+Subscribe to what you will act on, rather than everything.
+
+```text
+Being paid      payment.completed, payment.failed
+Payment links   link.created, link.viewed
+Customers       customer.created
+Wallets         wallet.created, wallet.credited, wallet.debited
+Invoices        invoice.created, invoice.sent, invoice.paid
+Subscriptions   plan.created, subscription.created, .charged,
+                .past_due, .cancelled
+Sessions        session.opened, session.closed
+```
+
+`payment.*` means you are being paid. `wallet.*` belongs to wallets you issue, where the money is your customer's and you are the operator. A merchant may run either or both.
+
+<Note title="Some declared events are never sent">
+`invoice.viewed`, `invoice.overdue`, `refund.completed`, `settlement.completed` and `customer.status.changed` exist as types but nothing raises them today. Subscribing to one is harmless; waiting on one is a flow that never runs.
+</Note>
+
+</Step>
+
+<Step title="Store the secret">
+
+Each endpoint gets its own secret.
+
+```text
+whsec_…
+```
+
+<Warning title="Not the same as your signing secret">
+`whsec_…` signs deliveries Mitu sends **to you**. `mps_…` signs requests Mitu forwards to your API on an agent's behalf. They sign opposite directions, and verifying with the wrong one fails every delivery, which usually gets diagnosed as a delivery problem rather than a key problem.
+</Warning>
+
+Each endpoint's deliveries must be verified with that endpoint's own secret.
+
+</Step>
+
+<Step title="Verify the signature">
+
+```http
+Content-Type: application/json
+X-Mitu-Signature: v1,t=1788990420,sig=<hmac-sha256>
+```
+
+Verify before you act on anything in the body. Keep the raw bytes: parsing JSON and re-encoding it changes key order and whitespace, and the comparison then fails. Use a timing-safe compare, and reject a timestamp outside a few minutes so a captured delivery cannot be replayed later.
+
+</Step>
+
+<Step title="Handle the envelope">
+
+Every event has the same shape:
+
+```json
+{
+  "event": "payment.completed",
+  "event_id": "evt_a8f1zq5xkm2lcn6f",
+  "event_created_at": "2026-09-09T14:22:57.003Z",
+  "event_data": { }
+}
+```
+
+Only the fields that apply are sent. On payment events, `source` tells you which shape to expect: one from a link carries no `service_id`, one from an MCP endpoint carries no `payment_link_id`.
+
+Anything naming a customer carries both ids: `customer_id` is Mitu's, `customer_ref` is yours.
+
+</Step>
+
+<Step title="Deduplicate, then acknowledge">
+
+```text
+Receive
+  |
+Verify with this endpoint's whsec_
+  |
+Seen this event_id? Acknowledge and stop
+  |
+Apply the change
+  |
+Answer 2xx
+```
+
+Mitu attempts a delivery up to five times with backoff, and **every attempt carries the same `event_id`**, because a retry is the same event arriving again rather than a new one. Deduplicating on it is the only thing stopping one payment being applied twice.
+
+Answer `2xx` to acknowledge. Anything else counts as a failure and is retried; after the last attempt the delivery is abandoned and you can resend it by hand.
+
+</Step>
+
+<Step title="Test it">
+
+The Test button sends a real delivery, recorded in the log like any other, so what you test is what production sends.
+
+Every attempt is logged with its status and response, so a delivery that failed can be inspected rather than guessed at.
+
+</Step>
+
+</Steps>
+
+## What to do with the common ones
+
+```text
+payment.completed   mark your record paid, using reference
+payment.failed      read reason: not all of them are worth a retry
+wallet.credited     tell the customer their wallet is ready
+wallet.debited      record the movement; check delivered
+customer.created    store the mapping, especially from an OAuth sign-in
+```
+
+`delivered: false` on a payment or wallet event means the money moved and your endpoint did not serve the call. That is money owed rather than revenue. See [paid but not delivered](/platform/payments/agent-payments).
+
+## Next
+
+<CardGroup cols={2}>
+  <Card title="Events" icon="regular bell" href="/platform/webhooks/events">
+    Every event and its full payload.
+  </Card>
+  <Card title="Webhooks" icon="regular arrows-rotate" href="/platform/webhooks/overview">
+    Signing, delivery and retries in depth.
+  </Card>
+  <Card title="Connect to AI agents" icon="regular plug" href="/guides/integration-guides/connect-to-ai-agents">
+    Put your product in front of agents.
+  </Card>
+  <Card title="Accept payments from agents" icon="regular credit-card" href="/guides/integration-guides/accept-payment-from-agents">
+    Charge for an operation.
+  </Card>
+</CardGroup>

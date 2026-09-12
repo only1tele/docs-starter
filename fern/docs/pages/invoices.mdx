@@ -1,0 +1,95 @@
+---
+title: Invoices
+subtitle: A formal billing document addressed to a customer, payable by a person or an agent through the same two entry points as a payment link.
+---
+
+Use an invoice where a payment link would be too thin: line items, tax, a discount, a due date, an invoice number, and a record that moves through a lifecycle rather than simply being paid or not.
+
+## Creating one
+
+```bash title="Create an invoice"
+curl --request POST \
+  --url https://api.mitu.ai/v1/invoices \
+  --header "x-api-key: $MITU_API_KEY" \
+  --header "Content-Type: application/json" \
+  --data '{
+    "customerId": "cus_ds9hazr8jd3l",
+    "invoiceNumber": "INV-2026-441",
+    "description": "Design services, September",
+    "currency": "USD",
+    "lineItems": [
+      { "name": "Design retainer", "quantity": 1, "amount": 1200.00 },
+      { "name": "Additional revisions", "description": "3 rounds",
+        "quantity": 3, "amount": 150.00 }
+    ],
+    "taxAmount": 123.75,
+    "discountAmount": 0,
+    "dueAt": "2026-10-01T00:00:00Z"
+  }'
+```
+
+<ParamField path="customerId" type="string" required={true}>
+  Who the invoice is addressed to. See [customers](/platform/customers/customer-api).
+</ParamField>
+
+<ParamField path="lineItems" type="array" required={true}>
+  At least one. Each carries `name`, `quantity`, `amount`, and an optional `description`.
+</ParamField>
+
+<ParamField path="currency" type="string" required={true}>
+  The currency of every line and of the total.
+</ParamField>
+
+<ParamField path="invoiceNumber" type="string">
+  Your own number. Assigned for you when omitted.
+</ParamField>
+
+<ParamField path="taxAmount" type="number" default="0">
+  Added to the line total.
+</ParamField>
+
+<ParamField path="discountAmount" type="number" default="0">
+  Taken off the line total.
+</ParamField>
+
+<ParamField path="dueAt" type="string">
+  ISO 8601. What "overdue" is measured against.
+</ParamField>
+
+## The lifecycle
+
+```text
+POST   /v1/invoices               create a draft
+POST   /v1/invoices/{id}/send     send it to the customer
+GET    /v1/invoices               list them
+GET    /v1/invoices/{id}          read one
+PATCH  /v1/invoices/{id}          amend one
+DELETE /v1/invoices/{id}/cancel   cancel one
+```
+
+Creating and sending are separate calls, so a draft can be checked or amended before the customer ever sees it.
+
+## Being paid
+
+A sent invoice is payable the same two ways a payment link is: a checkout page the customer opens, and a 402-protected URL on the API origin that an agent calls. Both use the `/invoice/` segment with the invoice id.
+
+```text
+https://mitu.ai/invoice/inv_5v6nxq2zlk9mpd8t
+https://api.mitu.ai/invoice/inv_5v6nxq2zlk9mpd8t
+```
+
+[Payment links](/platform/payments/payment-experiences) covers the shape of both paths, and [the 402 payment flow](/platform/payments/agent-payments) the agent side.
+
+{/* SCREENSHOT: docs/assets/platform/payments/invoice.png
+     Caption: "Use invoices where the payment belongs to a formal billing
+     workflow." Use the real invoice view. No real customer data. */}
+
+## Events
+
+`invoice.created`, `invoice.sent` and `invoice.paid` are emitted today. `payment.completed` also fires when the money arrives, carrying `source: "invoice"` and the `invoice_id`.
+
+<Note title="Two declared events are not yet emitted">
+`invoice.viewed` and `invoice.overdue` exist as event types but nothing raises them in the current implementation. Do not build a dunning flow on `invoice.overdue`: derive overdue from `dueAt` and the paid state instead.
+</Note>
+
+[Events](/platform/webhooks/events) has the payloads.

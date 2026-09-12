@@ -1,5 +1,357 @@
 ---
-title: Sell your API to agents
+title: Sell your API to AI agents
+subtitle: Turn the API you already run into paid capabilities that AI agents can discover, call and pay for without a human at the checkout.
 ---
 
-<Note>This page is being written. See the platform guide for the source material.</Note>
+Register the operations you want to sell as MCP tools and attach a price to each. When an agent calls a paid tool, Mitu answers with a payment requirement, accepts a payment the agent can satisfy, and forwards the paid request to your existing API.
+
+Your API keeps the product. Mitu provides the layer around it: discovery, tool definitions, the payment requirement, settlement, and signed delivery of the request once the money has moved.
+
+A company-data API might sell:
+
+```text
+search_companies   GET   /companies/search     fixed
+company_profile    GET   /companies/{domain}   fixed
+company_report     POST  /reports              dynamic
+```
+
+An agent can read what each one does and what it costs, pay for the one it needs, and use the result.
+
+<Note title="Agent Wallets are not required">
+You do not issue wallets in order to sell your API. The payer settles with a method it already supports. A Mitu Agent Wallet is one possible source of spending power for a customer's agent, and a separate product from this one.
+</Note>
+
+## What you will build
+
+1. Connect your existing API to Mitu.
+2. Register an operation as a tool.
+3. Price it.
+4. Connect the MCP from an agent client.
+5. Watch the agent discover the paid tool.
+6. See the `402 Payment Required` it gets back.
+7. Let the agent satisfy the requirement.
+8. Receive the paid request in your backend and verify it.
+9. Return the result.
+10. Track payment and delivery.
+
+## Before you begin
+
+You need:
+
+- A Mitu merchant account.
+- A server-side Mitu API key where configuration requires one.
+- An existing HTTP API.
+- At least one operation you want agents to pay to use.
+- A view on how that operation should be priced.
+- A backend that can verify a signed request.
+
+Assume you already serve:
+
+```http
+GET /companies/{domain}
+```
+
+```json title="What it returns today"
+{
+  "name": "Acme",
+  "domain": "acme.com",
+  "industry": "Technology",
+  "employees": 240
+}
+```
+
+The goal is not to replace that endpoint. It is to make the capability it already provides discoverable and payable.
+
+<Steps toc={true}>
+
+<Step title="Connect your existing API">
+
+In the dashboard, set the base URL of the API you want agents to reach.
+
+```text
+https://api.example.com
+```
+
+Set the health-check path as well if your API exposes one, so the dashboard can show whether the service is up.
+
+Agents interact with MCP tools. Calls that succeed are forwarded to the operations you already run. Mitu holds no unrestricted credential for your API: every forwarded request is signed with a secret Mitu issues you, and that signature is how your backend knows the call is genuine.
+
+{/* SCREENSHOT: docs/assets/use-cases/api-monetisation/integration-api.png
+     Caption: "Connect the API that provides the capabilities you want agents
+     to pay for." Show the base URL, the health-check path and service status.
+     No secrets visible. */}
+
+[The MCP](/platform/mcp/overview) covers what sits in front of your API, and [request signature verification](/platform/security/request-verification) covers what arrives at it.
+
+</Step>
+
+<Step title="Register the operation">
+
+Pick an operation agents should be able to find, and register it as a tool.
+
+```yaml
+name: company_profile
+method: GET
+path: /companies/{domain}
+description: Retrieves a structured company profile for a specific domain
+when_to_use: Use when you need company information for a known website or email domain
+pricing_type: fixed
+price: 0.05
+```
+
+That is a description of the endpoint record, not a request body. Endpoints are configured in the dashboard.
+
+The name and description should describe the capability, not restate the route. A model sees these and nothing else:
+
+```text
+Poor      get_company
+          Gets company
+
+Better    company_profile
+          Retrieves a structured company profile for a specific domain
+```
+
+`when_to_use` is what stops a model reaching for the wrong tool when two look similar. Say what must already be known before the call makes sense.
+
+If you maintain an OpenAPI document, import it instead of recreating each operation by hand. Mitu creates one endpoint per operation with the schemas attached.
+
+{/* SCREENSHOT: docs/assets/use-cases/api-monetisation/paid-endpoint.png
+     Caption: "Register the API operation and describe when an agent should
+     use it." Show the tool name, method, path, description, pricing and the
+     authentication requirement if the UI displays it. */}
+
+{/* SCREENSHOT (optional): docs/assets/use-cases/api-monetisation/openapi-import.png
+     Caption: "Import an OpenAPI document to create endpoints in bulk." */}
+
+The full field reference is on [MCP endpoints](/platform/mcp/endpoints).
+
+</Step>
+
+<Step title="Price the operation">
+
+A paid tool needs a pricing model that matches how the underlying service actually charges. Mitu supports `free`, `fixed`, `dynamic`, `tiered` and `session`.
+
+**Fixed** suits an operation where every call costs the same: a single lookup, an enrichment, a standard search, a known digital resource.
+
+```yaml
+pricing_type: fixed
+price: 0.05
+```
+
+**Dynamic** suits an operation whose amount depends on the request: a report priced by size, processing priced by record count, a purchase totalled at request time. It runs as a quote and then a paid call, and the difference between them is one header.
+
+```text
+No x-mitu-amount-charged    a quote. Return 402 with your price. Do no work.
+Header present              payment has moved. Verify, then do the work.
+```
+
+<Warning title="A quote is not permission to execute">
+On a dynamic endpoint, a request arriving without `x-mitu-amount-charged` is Mitu asking what the call would cost. Performing the paid work at that point means doing it for nothing, every time.
+</Warning>
+
+**Tiered** and **session** are covered on [endpoint types](/platform/payments/pricing), along with the full behaviour of each model. [Dynamic pricing](/platform/payments/pricing) covers the two-call flow in detail.
+
+{/* SCREENSHOT: docs/assets/use-cases/api-monetisation/pricing.png
+     Caption: "Choose how Mitu should price calls to the operation." Use the
+     real pricing configuration UI. */}
+
+</Step>
+
+<Step title="Connect the MCP from an agent client">
+
+Agents reach you at your Mitu URL, or at your own domain once verified.
+
+```text
+https://mcp.mitu.ai/mcp
+https://mcp.example.com/mcp
+```
+
+Connect it from Claude or another MCP-compatible client. The connected agent sees the capabilities you registered:
+
+```text
+search_companies   Search for companies matching a query.
+company_profile    Retrieve a structured company profile for a domain.
+company_report     Generate a detailed company report.
+```
+
+{/* SCREENSHOT: docs/assets/use-cases/api-monetisation/claude-tools.png
+     Caption: "The API operations you registered are now available as tools to
+     the agent." One of the main visuals on this page. Only show pricing
+     labels if the client actually displays them. */}
+
+[Domain and integration](/platform/mcp/domains) covers moving to your own URL.
+
+</Step>
+
+<Step title="The agent calls the paid tool">
+
+Somebody asks their agent for the company profile of `example.com`. The agent picks `company_profile` and calls it.
+
+Because the operation is paid, Mitu does not deliver it. It answers with a payment requirement:
+
+```http
+HTTP/1.1 402 Payment Required
+```
+
+```json title="The payment requirement"
+{
+  "type": "https://paymentauth.org/problems/payment-required",
+  "status": 402,
+  "intent": "fixed",
+  "service":  { "id": "svc_...", "name": "Example Data" },
+  "endpoint": { "id": "ep_...",  "path": "/companies/example.com" },
+  "amount":   { "value": "0.050000", "currency": "USDC" },
+  "accepts": [
+    { "id": "chal_1", "method": "x402", "network": "base",
+      "asset": "USDC", "amount": "0.050000",
+      "recipient": "0x1DDb...", "nonce": "0x81e0..." },
+    { "id": "chal_2", "method": "mpp_crypto", "network": "tempo",
+      "asset": "USDC", "amount": "0.050000", "recipient": "0x1DDb..." },
+    { "id": "chal_3", "method": "mpp_spt", "amount": "0.050000",
+      "currency": "usdc", "networkId": "profile_..." }
+  ]
+}
+```
+
+This is not an error. It says the operation requires payment, states the amount, and lists the methods you accept. The agent picks one it can satisfy. Nothing is delivered until it does.
+
+[The 402 payment flow](/platform/payments/agent-payments) covers each field.
+
+</Step>
+
+<Step title="The agent pays">
+
+The agent settles one of the challenges and calls again with the receipt.
+
+**x402** settles in USDC on Base, using EIP-3009 `transferWithAuthorization`. The payer signs an authorisation, Mitu broadcasts it and Mitu pays the gas, so the payer needs no ETH.
+
+**MPP** covers two methods: `mpp_crypto` settles the same way on Tempo, and `mpp_spt` is a card-backed payment through a single-purpose token, for payers with no wallet at all.
+
+You choose which to accept. Offering more than one costs nothing, and the agent picks whichever it can settle. [Payment methods](/platform/payments/agent-payments) covers all three.
+
+{/* SCREENSHOT: docs/assets/use-cases/api-monetisation/claude-payment.png
+     Caption: "The agent satisfies the payment requirement before the paid API
+     operation is delivered." Capture a real client interaction. */}
+
+</Step>
+
+<Step title="Receive the paid request and verify it">
+
+Once settlement is confirmed, Mitu forwards the request to your operation.
+
+| Header | Purpose |
+| --- | --- |
+| `x-mitu-signature` | Proof the request was signed by Mitu |
+| `x-mitu-request-id` | `req_...`, unique per call. Use it for idempotency |
+| `x-mitu-amount-charged` | The amount, present only when money moved |
+| `x-mitu-customer-id` | `cus_...`, when the payer is a known Mitu customer |
+| `x-mitu-customer-ref` | Your own id for that customer, when applicable |
+| `x-mitu-agent-id` | Which agent made the call |
+| `authorization` | The customer's access token, when you use OAuth sign-in |
+
+Not every header is on every request. An agent paying from its own funds is not a customer of yours, so the customer headers are absent, and that is normal rather than a fault.
+
+Verify the signature before your endpoint does any work. Everything else in the request is a plain header and means nothing until the signature proves the request came from Mitu. Deduplicate on `x-mitu-request-id`, which is the only thing stopping the same paid request being served twice.
+
+```text
+Agent
+  |  calls the tool
+Mitu
+  |  402 Payment Required
+Agent
+  |  pays
+Mitu
+  |  verifies settlement, signs the request
+Your API
+  |  verifies the signature, does the work
+Agent
+     receives the result
+```
+
+The algorithm and a worked Node implementation are on [request signature verification](/platform/security/request-verification).
+
+</Step>
+
+<Step title="Return the result">
+
+After verification your endpoint handles the call exactly as it always has.
+
+```json title="Your existing response"
+{
+  "name": "Example",
+  "domain": "example.com",
+  "industry": "Technology",
+  "employees": 240
+}
+```
+
+Mitu returns it to the agent through the MCP call it started. Your backend never learns that the caller was an agent rather than your own app, beyond the headers it verified.
+
+{/* SCREENSHOT: docs/assets/use-cases/api-monetisation/claude-result.png
+     Caption: "After payment, the agent receives the result from your existing
+     API." Prefer a real successful paid call. */}
+
+</Step>
+
+<Step title="Track payment and delivery">
+
+Every paid call is visible from your side: the amount, the endpoint, the request id, the settlement, and whether the result was delivered.
+
+{/* SCREENSHOT: docs/assets/use-cases/api-monetisation/payment-details.png
+     Caption: "Inspect the payment and delivery status from the dashboard." */}
+
+For production, do not make the dashboard your only source of payment state. Subscribe to `payment.completed`, which fires when you are paid and carries `delivered`. If the payer used a Mitu Agent Wallet you issued, `wallet.debited` describes the same movement from their side, joined to yours by `tx_hash`. `wallet.debited` is wallet-specific and does not fire for every agent payment.
+
+[Events](/platform/webhooks/events) lists the payloads, and [webhooks](/platform/webhooks/overview) covers delivery and retries.
+
+</Step>
+
+<Step title="Handle paid but not delivered">
+
+Settlement happens before your endpoint is called, and it is final. If your endpoint then refuses the call, because of a bad deploy, an expired secret or an ordinary bug, you have been paid and the payer has received nothing.
+
+```json title="payment.completed, delivery failed"
+{
+  "delivered": false,
+  "failure_status": 500
+}
+```
+
+Nothing downstream reverses an on-chain settlement. Mitu reports the state instead, and the dashboard keeps a running total. Treat it as money owed: fulfil the work, deliver the result later, or refund the payer, depending on what you sell.
+
+{/* SCREENSHOT: docs/assets/use-cases/api-monetisation/paid-not-delivered.png
+     Caption: "Monitor payments that settled but were not delivered by your
+     API." */}
+
+[Paid but not delivered](/platform/payments/agent-payments) covers the state and how to work through it.
+
+</Step>
+
+</Steps>
+
+## The result
+
+You keep the API, the business logic, the thing being sold, the prices you set, and fulfilment. Mitu provides discovery, the tool definitions, payment requirements, the payment flows, signed delivery, and the events that tell you what happened.
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Accepting payment" icon="regular credit-card" href="/platform/payments/overview">
+    How a paid call becomes settled money.
+  </Card>
+  <Card title="The 402 payment flow" icon="regular arrow-right-arrow-left" href="/platform/payments/agent-payments">
+    Every field of a payment requirement, and what follows it.
+  </Card>
+  <Card title="Payment methods" icon="regular coins" href="/platform/payments/agent-payments">
+    x402, `mpp_crypto` and `mpp_spt`.
+  </Card>
+  <Card title="Dynamic pricing" icon="regular calculator" href="/platform/payments/pricing">
+    Quoting per call, and keeping the two legs apart.
+  </Card>
+  <Card title="Verify requests" icon="regular shield-check" href="/platform/security/request-verification">
+    Prove a paid request came from Mitu before doing the work.
+  </Card>
+  <Card title="Events" icon="regular bell" href="/platform/webhooks/events">
+    `payment.completed`, `payment.failed` and the delivery flags.
+  </Card>
+</CardGroup>

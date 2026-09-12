@@ -1,0 +1,95 @@
+---
+title: Subscriptions
+subtitle: A plan defines what recurs and how often. A subscription attaches a payer to one.
+---
+
+## Plans
+
+A plan is the product: an amount, a currency, and how often it is charged.
+
+```bash title="Create a plan"
+curl --request POST \
+  --url https://api.mitu.ai/v1/subscription-plans \
+  --header "x-api-key: $MITU_API_KEY" \
+  --header "Content-Type: application/json" \
+  --data '{
+    "name": "Pro",
+    "description": "Unlimited lookups and priority support",
+    "amount": 49.00,
+    "currency": "USD",
+    "billingInterval": "month",
+    "features": ["Unlimited lookups", "Priority support"]
+  }'
+```
+
+<ParamField path="name" type="string" required={true}>
+  What the payer sees.
+</ParamField>
+
+<ParamField path="amount" type="number" required={true}>
+  Charged once per interval.
+</ParamField>
+
+<ParamField path="currency" type="string" required={true} />
+
+<ParamField path="billingInterval" type="day | week | month | year" required={true}>
+  How often the charge recurs.
+</ParamField>
+
+<ParamField path="features" type="array">
+  Strings shown alongside the plan.
+</ParamField>
+
+A plan is `active`, `paused` or `archived`.
+
+## Subscriptions
+
+```bash title="Subscribe someone to a plan"
+curl --request POST \
+  --url https://api.mitu.ai/v1/subscriptions \
+  --header "x-api-key: $MITU_API_KEY" \
+  --header "Content-Type: application/json" \
+  --data '{
+    "subscriptionPlanId": "plan_7h2kq9xz",
+    "paymentMethod": "mpp_crypto",
+    "subscriberId": "cus_ds9hazr8jd3l",
+    "subscriberType": "user"
+  }'
+```
+
+<ParamField path="subscriptionPlanId" type="string" required={true} />
+
+<ParamField path="paymentMethod" type="mpp_crypto | mpp_spt" required={true}>
+  How the recurring charge settles.
+</ParamField>
+
+<ParamField path="subscriberId" type="string">
+  The agent or user that subscribed.
+</ParamField>
+
+<ParamField path="subscriberType" type="agent | user" default="agent" />
+
+<Warning title="Recurring charges settle over MPP only">
+`x402` is a one-time authorisation signed for a specific amount and recipient, so it cannot carry a future charge. A subscription takes `mpp_crypto` or `mpp_spt`, and passing `x402` is rejected.
+</Warning>
+
+A subscription is `active`, `past_due`, `paused`, `cancelled` or `expired`.
+
+```text
+POST /v1/subscriptions/{id}/cancel    stop it
+GET  /v1/subscriptions/{id}/invoices  what it has generated
+```
+
+Each charge produces an invoice, itself `pending`, `paid`, `failed`, `refunded` or `void`.
+
+## Offering plans through a link
+
+A payment link of type `subscription` carries a `planId`, or several through `planIds` with `allowCustomerChoice`, which lets the payer pick. Amount and currency come from the plan rather than from the link. See [payment links](/platform/payments/payment-experiences).
+
+{/* SCREENSHOT: docs/assets/platform/payments/subscription.png
+     Caption: "Use subscriptions when the payer keeps a recurring service
+     active." */}
+
+## Events
+
+`plan.created`, `subscription.created`, `subscription.charged`, `subscription.past_due` and `subscription.cancelled` are all emitted. [Events](/platform/webhooks/events) covers delivery.

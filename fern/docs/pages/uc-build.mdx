@@ -1,5 +1,424 @@
 ---
-title: Build on other APIs
+title: Build agents that can pay
+subtitle: Let the agent you are building settle a payment on behalf of its user, from a wallet with limits somebody else set.
 ---
 
-<Note>This page is being written. See the platform guide for the source material.</Note>
+Something the agent is doing needs paying for. It has been handed a payment URL. This guide is what happens next.
+
+```text
+The agent's work requires payment
+        |
+It receives a payment URL
+        |
+It hands that URL to Mitu's pay tool
+        |
+Mitu reads the payment requirement
+        |
+Mitu checks the wallet, the balance and the limits
+        |
+The payment settles, or waits for the user
+        |
+The agent carries on with what it was doing
+```
+
+That is the whole integration point. Mitu does not need to know how the agent came by the URL, only that it has one and that there is a wallet it is allowed to use.
+
+## Where the payment URL comes from
+
+Anywhere. It is a handoff, not a discovery mechanism:
+
+- a merchant API response
+- a checkout or booking flow
+- an order confirmation
+- an invoice or a payment link
+- a 402 from an endpoint the agent called
+- another tool, or another agent
+
+The use case begins once the agent holds one.
+
+<Note title="The agent never owns the money">
+The balance belongs to the customer, and the controls on it are enforced by Mitu rather than by the agent. An agent holds no key, cannot raise a limit, and cannot move money except by paying. Autonomy is not the same as unlimited spending.
+</Note>
+
+## Three things this is not
+
+**Not agent commerce.** Same transaction, opposite side of it. There you run the hotel and want agents to book it; here you are building the assistant that books one. If you are the seller, [let AI agents buy from you](/guides/use-cases/agent-commerce) is your guide.
+
+**Not Agent Wallets.** A wallet answers *what money can this agent use*. This answers *how it uses that money inside a task*. A wallet chooses nothing and plans nothing; it supplies bounded spending power and refuses what falls outside it. [Give your customers Agent Wallets](/guides/use-cases/agent-wallets) covers issuing one.
+
+**Not an AI with your wallet.** The agent gets tools that can pay. It gets nothing that can withdraw, transfer or reconfigure. That difference is the design.
+
+## Roles
+
+| | Responsibility |
+| --- | --- |
+| **You, the business** | Create the customer and the wallet, set the controls, receive the events |
+| **Your customer** | Owns the money, funds the wallet, approves what needs approving |
+| **Their agent** | Holds the payment URL, names the wallet, carries on with the result |
+| **Mitu** | Reads the requirement, enforces the controls, settles, records the movement |
+
+## What you will build
+
+1. Create or identify the customer whose money will be spent.
+2. Give them a wallet.
+3. Configure the spending controls.
+4. Fund it.
+5. Connect the customer's AI client.
+6. Confirm the agent's wallet tools.
+7. Take a payment URL into the workflow.
+8. Hand it to `pay`.
+9. Name the right wallet.
+10. Let Mitu enforce the controls.
+11. Handle a payment held for approval.
+12. Continue the workflow with the result.
+13. Track the movement and handle a purchase that was paid for but not delivered.
+
+## Before you begin
+
+You need a Mitu merchant account and a server-side key, a customer, a funded wallet with controls that suit the task, and an MCP-compatible client for the customer to connect.
+
+<Warning title="Merchant keys never reach the agent">
+`sk_live_...` and `sk_test_...` create customers, wallets and payment links. They belong on your server. The customer connects with their own `mcpk_...` key or through your OAuth, and neither holds money nor can create a wallet.
+</Warning>
+
+<Steps toc={true}>
+
+<Step title="Create or identify the customer">
+
+Every wallet belongs to a customer. Create one from your backend, or reuse the customer Mitu made when the person first signed in through your OAuth.
+
+```bash title="Create a customer"
+curl --request POST \
+  --url https://api.mitu.ai/v1/customers \
+  --header "x-api-key: $MITU_API_KEY" \
+  --header "Idempotency-Key: customer-user_8841" \
+  --header "Content-Type: application/json" \
+  --data '{
+    "client_reference_id": "user_8841",
+    "first_name": "Ada",
+    "last_name": "Obi",
+    "email": "ada@example.com"
+  }'
+```
+
+Do not create a second customer because the same person has started using an agent. [Customers](/platform/customers/customer-api) covers both paths.
+
+</Step>
+
+<Step title="Give them a wallet">
+
+```bash title="Create a wallet"
+curl --request POST \
+  --url https://api.mitu.ai/v1/customers/cus_ds9hazr8jd3l/wallets \
+  --header "x-api-key: $MITU_API_KEY" \
+  --header "Content-Type: application/json" \
+  --data '{
+    "name": "Travel",
+    "limits": { "per_payment": 500, "monthly": 3000, "approve_above": 750 }
+  }'
+```
+
+Name it for its purpose, because the name is what the customer says and what the agent passes. A wallet exists only because you created one: signing in does not make one, and neither does connecting a client.
+
+[Agent Wallets](/platform/agent-wallets/overview) covers creation in full.
+
+</Step>
+
+<Step title="Configure the spending controls">
+
+This is the step that makes an autonomous agent safe to run, and it belongs before the agent runs rather than after.
+
+| Control | Meaning |
+| --- | --- |
+| `monthly` | The most this wallet may spend in a calendar month |
+| `per_payment` | The intended ceiling for a single payment |
+| `approve_above` | The intended threshold above which a payment waits for the customer |
+
+Limits you omit are inherited from the customer's existing limits. Omitted does not mean unlimited, and zero means no limit rather than a ceiling of zero.
+
+<Warning title="Only the monthly limit currently gates a payment">
+`monthly` is the control that changes what happens today: a payment that would take the wallet past it is held for the customer rather than settling. `per_payment` and `approve_above` are accepted, stored and returned, but nothing in the payment path reads them yet. Do not tell your users a per-payment ceiling is protecting them until that changes.
+</Warning>
+
+[Limits and controls](/platform/agent-wallets/limits-and-controls) covers the semantics.
+
+</Step>
+
+<Step title="Fund it">
+
+The customer sends USDC to the wallet's address on a network it supports. Deposits are detected on chain and credited automatically, and `wallet.credited` fires when they land.
+
+Base and Tempo share one EVM address; Solana's is different, and funds sent to the wrong chain are not recoverable. Always show the network beside the address. [Funding](/platform/agent-wallets/funding) covers it.
+
+</Step>
+
+<Step title="Connect the customer's AI client">
+
+The agent sees wallets only once Mitu knows which customer is connected. That happens through the same two methods your MCP already uses: a customer key sent as `x-api-key: mcpk_...`, or a sign-in through your OAuth.
+
+The connected customer must be the customer that owns the wallet. A key belongs to exactly one customer; an OAuth sign-in maps to the customer created from that `sub`.
+
+{/* SCREENSHOT: docs/assets/use-cases/agent-purchasing/connect-agent.png
+     Caption: "Connect the customer's AI client so Mitu knows whose wallet
+     this is." Never show a real customer key. */}
+
+[MCP authentication](/platform/mcp/authentication) covers both.
+
+</Step>
+
+<Step title="Confirm the wallet tools">
+
+Four tools appear for that customer:
+
+```text
+list_wallets   the names they hold
+get_balance    a balance, or all of them
+get_address    where to fund one
+pay            settle a charge from a wallet
+```
+
+The agent can read the wallets it is permitted to use, read a balance, read a funding address, and pay. It cannot create a wallet, move money between wallets, withdraw, change a limit, or spend from a wallet it was not given.
+
+[Wallet tools](/platform/agent-wallets/wallet-tools) has the exact arguments.
+
+</Step>
+
+<Step title="Take the payment URL into the workflow">
+
+At some point the agent's work produces something that must be paid. A booking returns a payment link, an invoice arrives, an endpoint answers 402.
+
+The agent does not need to understand the payment requirement, parse the 402, or choose a settlement method. It needs to recognise that it has a payment to make and hand it on.
+
+</Step>
+
+<Step title="Hand it to pay">
+
+The `pay` tool takes the charge, checks the wallet and the limits, settles, and returns what the other side answered.
+
+<Warning title="Check which pay tool your agent has">
+There are two, and they take different arguments. On a **merchant's own MCP**, `pay` takes `endpoint`, a path on that merchant as named in the 402, plus an optional `wallet` name. On the **Mitu MCP**, `pay` takes a full `url` and has no `wallet` argument, spending the connected account's balance instead of a customer's wallet.
+
+No tool today accepts a payment URL *and* a wallet name together. If your agent needs to pay an arbitrary URL from a named customer wallet, talk to us before building on it.
+</Warning>
+
+Paying a merchant's own endpoint from a named wallet:
+
+```text
+pay({ endpoint: "/orders", method: "POST", body: {...}, wallet: "Travel" })
+```
+
+`endpoint` is a path, not a URL, and Mitu builds the destination from the merchant this connection belongs to. That restriction is deliberate: a tool that paid an arbitrary address supplied by a model would be one a prompt injection could aim wherever it liked, and it reads to every client-side safety check as exactly that.
+
+</Step>
+
+<Step title="Name the right wallet">
+
+```text
+One wallet       the agent need not name it
+Several wallets  it must
+No name given    refused, with the names returned
+Unknown name     refused, with no fallback
+```
+
+Refusing is the point. "Pay for the hotel from Travel" must not quietly become "pay from Office because Travel was short". The money was separated on purpose, and the separation is only real if it holds at the moment it costs something.
+
+Reading is the deliberate exception: `get_balance` with no name answers for every wallet, because reading harms nothing.
+
+[Multiple wallets](/platform/agent-wallets/multiple-wallets) covers the rules and why they exist.
+
+</Step>
+
+<Step title="Let Mitu enforce the controls">
+
+```text
+Is this wallet the customer's?
+        |
+Is there enough balance?
+        |
+Does this stay inside the monthly limit?
+        |
+Within: settle now
+Over:   hold, and raise an approval request
+```
+
+The agent cannot skip, soften or reorder any of that. It is applied to the payment, not offered to the caller.
+
+</Step>
+
+<Step title="Handle a payment held for approval">
+
+A payment that would take the wallet past its monthly limit does not fail. It is held, an approval request is raised for the customer, and `pay` answers `pending_approval` with the amount.
+
+<Warning title="pending_approval is neither a settlement nor a decline">
+The money has not moved and it still might. An agent that reports it as a failure will tell the customer their booking did not happen when it is waiting on them; one that reports it as success will tell them it did when it has not. Say that it is waiting for their approval.
+</Warning>
+
+The workflow pauses on a person rather than ending. Design for that: hold the task, tell the user what needs approving and why, and resume when it clears.
+
+</Step>
+
+<Step title="Continue the workflow">
+
+A payment is usually a step, not the destination. The result feeds whatever comes next, and the agent should return the outcome rather than the receipt.
+
+```text
+Good                          Poor
+
+Hotel booked                  Payment succeeded
+Example Hotel                 Transaction 0xfe09...
+18 to 20 October              Status: completed
+$420, from Travel
+```
+
+Where the workflow paid for several things, a cost summary is worth showing, because it is the part the user cannot see:
+
+```text
+Report complete
+  market data   $0.10
+  enrichment    $0.05
+  compute       $0.20
+  total         $0.35
+```
+
+Build that from what you recorded as the workflow ran. Response schemas belong to the services being paid, not to Mitu, so do not assume a universal cost field.
+
+</Step>
+
+<Step title="Track the movement">
+
+`wallet.debited` records money leaving the customer's wallet, carrying the amount, the destination, the settlement `tx_hash` and `delivered`.
+
+If you both issued the wallet and received the payment, you also get `payment.completed` for your side. The two describe one movement and are joined by **`tx_hash`**, not `transaction_id`, which differs because each names a record in a different system.
+
+{/* SCREENSHOT: docs/assets/use-cases/agent-purchasing/wallet-activity.png
+     Caption: "Track what the agent spent." No real balances. */}
+
+[Events](/platform/webhooks/events) has the payloads.
+
+</Step>
+
+<Step title="Handle paid but not delivered">
+
+Settlement happens before the other side is called. If it then fails, the money is gone and the customer has nothing.
+
+`pay` answers `settled_not_delivered` in that case, and says so in words rather than as a bare status, because the one thing an agent must not do is tell the customer nothing was charged.
+
+<Warning title="Never retry a settled_not_delivered payment">
+The money already left. Retrying charges the customer a second time for the same thing. Tell them plainly, give them the reference and the transaction, and point them at whoever failed to deliver.
+</Warning>
+
+An on-chain settlement is final and nothing reverses it. [Paid but not delivered](/platform/payments/agent-payments) covers the state.
+
+</Step>
+
+</Steps>
+
+## Booking a hotel
+
+<Steps>
+
+<Step title="The user asks">
+For two nights in London under \$250 a night.
+</Step>
+
+<Step title="The agent does its work">
+Through whatever services it uses. That part is yours; Mitu is not involved.
+</Step>
+
+<Step title="The booking needs paying">
+The agent now holds a charge.
+</Step>
+
+<Step title="It pays">
+It names the wallet. Mitu does the rest.
+
+```text
+pay({ endpoint: "/bookings", method: "POST", body: {...}, wallet: "Travel" })
+```
+
+Mitu checks the wallet belongs to that customer, that the balance covers it, and that it stays inside the monthly limit.
+</Step>
+
+<Step title="If it is too large">
+The payment is held and the agent tells the user it needs their approval. It does not pick a cheaper hotel or a different wallet.
+</Step>
+
+<Step title="It answers the question">
+The outcome, not the receipt.
+
+```text
+Hotel booked
+Example Hotel
+18 to 20 October
+$420, from Travel
+```
+</Step>
+
+</Steps>
+
+## Paying an invoice
+
+An assistant is forwarded an invoice with a payment link. There is nothing to discover and nothing to choose: the amount is fixed and the payee is named.
+
+The agent hands the charge to `pay` with the wallet the user named, and reports that the invoice is settled with the reference. This is the shortest version of the whole use case, and the most common.
+
+## Paying for an API result
+
+A pipeline needs a dataset that charges per call. The endpoint answers 402, the agent pays, and the data comes back as the response to the same call it made.
+
+It keeps going as long as the balance holds and each payment stays inside the limit. That is what makes a pipeline economically autonomous without making it financially unbounded. `get_balance` before a long run lets the agent say up front whether it can finish.
+
+## Failure cases
+
+Each of these needs a different response, and treating them alike is how a workflow either stalls or pays twice.
+
+| Situation | What happens | What the agent should do |
+| --- | --- | --- |
+| Not enough balance | The payment cannot complete | Say how short it is. Do not retry |
+| Monthly limit would be exceeded | Held, approval raised | Report it as awaiting approval |
+| Several wallets, none named | Refused, names returned | Put the choice to the user |
+| Unknown wallet name | Refused, no fallback | Ask again rather than guessing |
+| No method the payer supports | `no_supported_method` | Stop. Retrying changes nothing |
+| Paid, not delivered | `settled_not_delivered` | Tell the user, give the reference, never retry |
+| An arbitrary transfer is attempted | Not expressible in any tool | Nothing to handle |
+
+## The security model
+
+**The agent never receives** a merchant key, a wallet private key, the ability to withdraw, the ability to change a limit, or any way to move money that is not a payment.
+
+**The agent receives** tools that can pay within bounds somebody else set.
+
+```text
+Giving an AI your wallet
+        is not
+Giving an AI permissioned spending capability
+```
+
+The difference shows under prompt injection. An agent that has read a malicious page can be talked into wanting to pay something, and it will still meet the same balance, the same limit and the same approval threshold, and it still cannot name a wallet the customer never gave it. Persuading a model does not persuade the ledger.
+
+## The result
+
+**The customer controls** the funding, the limits and the approvals. **You control** which customers have wallets, what they are called and what they may spend. **The agent** holds a payment URL, names a permitted wallet, and carries on with the result. It cannot raise a limit, withdraw, hold a key, or spend from a wallet it was not given.
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Agent Wallets" icon="regular wallet" href="/platform/agent-wallets/overview">
+    Creating a wallet and what it is.
+  </Card>
+  <Card title="Wallet tools" icon="regular screwdriver-wrench" href="/platform/agent-wallets/wallet-tools">
+    The four tools, their arguments, and what they refuse.
+  </Card>
+  <Card title="Limits and controls" icon="regular sliders" href="/platform/agent-wallets/limits-and-controls">
+    What is enforced, and what happens at the limit.
+  </Card>
+  <Card title="Multiple wallets" icon="regular layer-group" href="/platform/agent-wallets/multiple-wallets">
+    Separate pots and the selection rules.
+  </Card>
+  <Card title="Accepting payment" icon="regular credit-card" href="/platform/payments/overview">
+    What a payment requirement is on the other side.
+  </Card>
+  <Card title="Buying through the Mitu MCP" icon="regular cart-shopping" href="/platform/mcp/mitu-mcp">
+    The account-funded route, and its own `pay` tool.
+  </Card>
+</CardGroup>

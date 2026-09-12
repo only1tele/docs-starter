@@ -1,0 +1,62 @@
+---
+title: OpenAPI import
+subtitle: Create endpoints from a document you already maintain, rather than adding operations by hand.
+---
+
+If your API has an OpenAPI document, import it. Mitu parses it and creates one endpoint per operation, with the schemas attached.
+
+```text
+Upload the document
+        |
+Mitu parses the operations
+        |
+One endpoint per operation, with schemas
+        |
+You review, edit and choose what to publish
+```
+
+## What Mitu derives
+
+```text
+path            from the operation
+method          from the operation
+name            from the operation id or summary
+description     from the operation description
+input_schema    from parameters and the request body
+output_schema   from the success response
+```
+
+## What it cannot derive
+
+An OpenAPI document is written for a developer reading a reference. A tool definition is read by a model choosing between tools. They overlap, but they are not the same document, and two fields almost always need a pass afterwards.
+
+**`when_to_use` is not in OpenAPI at all.** There is no field for it, so it arrives empty. It is also the field that most affects whether a model picks the right tool, so leaving it empty gives up the largest part of the benefit.
+
+**Pricing is not in OpenAPI either.** Every imported endpoint starts free. Set `pricing_type` on anything that should charge.
+
+A `summary` of "Create booking" is accurate and tells a model nothing it could not guess from the name. [Endpoints](/platform/mcp/endpoints) covers what a good description does instead.
+
+## Review before publishing
+
+Importing a whole document usually produces more tools than an agent should see. Registering every operation you serve makes it more likely one gets called that should not have been.
+
+```text
+Remove what agents should not call
+Set is_public: false on anything staged
+Set requires_auth where the operation touches an account
+Write when_to_use on everything that survives
+Price what should charge
+```
+
+A channel with four well-described tools is more useful than one with forty a model cannot choose between.
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="Endpoints" icon="regular list-check" href="/platform/mcp/endpoints">
+    The full endpoint record.
+  </Card>
+  <Card title="Tool schemas" icon="regular brackets-curly" href="/platform/mcp/tool-schemas">
+    Making the schemas work for a model.
+  </Card>
+</CardGroup>

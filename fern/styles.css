@@ -221,9 +221,9 @@ pre {
   --cover-btn: var(--mitu-green);
   --cover-line: #e8ebee;
   --cover-band: #f1f4f3;
-  --cover-cta: #f3f5f8;
+  --cover-cta: #f1f4f3;
 
-  max-width: 910px;
+  max-width: 1080px;
   margin: 0 auto;
   padding: 56px clamp(20px, 4vw, 48px) 96px;
 }
@@ -266,15 +266,43 @@ pre {
   white-space: nowrap;
   transition: background-color 0.15s ease, border-color 0.15s ease;
 }
-.mitu-btn-primary {
+/* Fern wraps a link's label in a <p>, which arrives with prose colour, size
+   and line-height: the label turns dark on a green button and sits off-centre
+   beside the arrow. Hand all four back to the anchor. */
+.mitu-btn p,
+.mitu-sec-link p,
+.mitu-card > a p,
+.mitu-step a p {
+  margin: 0;
+  padding: 0;
+  font-size: inherit;
+  font-weight: inherit;
+  line-height: 1;
+  color: inherit;
+}
+
+/* Fern's .fern-mdx-link sets a colour at the same specificity as ours and its
+   stylesheet loads later, so the label took the accent navy. An element+class
+   selector outranks it; the injected <p> then inherits white as it should. */
+a.mitu-btn-primary {
   background: var(--cover-btn);
-  color: #fff;
   border: 1px solid var(--cover-btn);
 }
-.mitu-btn-primary:hover {
-  background: var(--mitu-green-hover);
+a.mitu-btn-primary,
+a.mitu-btn-primary p {
   color: #fff;
 }
+/* The border darkens with the fill - left at the resting green it reads as a
+   bright ring around a duller button. */
+a.mitu-btn-primary:hover {
+  background: var(--mitu-green-hover);
+  border-color: var(--mitu-green-hover);
+}
+a.mitu-btn-primary:hover,
+a.mitu-btn-primary:hover p {
+  color: #fff;
+}
+
 .mitu-btn-ghost {
   background: #fff;
   color: var(--mitu-ink);
@@ -290,7 +318,12 @@ pre {
   align-items: baseline;
   justify-content: space-between;
   gap: 16px;
-  margin: 64px 0 18px;
+  margin: 28px 0 14px;
+}
+/* The first section sits under the hero's buttons and wants more air than the
+   run-on gaps between sections further down. */
+.mitu-hero-actions + .mitu-sec-head {
+  margin-top: 58px;
 }
 .mitu-sec-head h2 {
   margin: 0;
@@ -341,7 +374,7 @@ pre {
   color: var(--mitu-body);
 }
 .mitu-card > a,
-.mitu-step > a {
+.mitu-step a {
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -351,14 +384,14 @@ pre {
   text-decoration: none;
 }
 .mitu-card > a:hover,
-.mitu-step > a:hover {
+.mitu-step a:hover {
   color: #0e6628;
 }
 .mitu-arrow {
   transition: transform 0.15s ease;
 }
 .mitu-card > a:hover .mitu-arrow,
-.mitu-step > a:hover .mitu-arrow {
+.mitu-step a:hover .mitu-arrow {
   transform: translateX(3px);
 }
 
@@ -374,8 +407,8 @@ pre {
   justify-content: space-between;
   gap: 28px;
   flex-wrap: wrap;
-  margin-top: 56px;
-  padding: 24px 26px;
+  margin-top: 24px;
+  padding: 22px 24px;
   border-radius: 10px;
   background: var(--cover-band);
 }
@@ -438,25 +471,36 @@ pre {
   gap: 16px;
 }
 .mitu-step {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
   border: 1px solid var(--cover-line);
   border-radius: 10px;
   padding: 20px;
 }
+.mitu-step-body {
+  min-width: 0;
+}
 .mitu-step-n {
-  display: inline-flex;
+  /* Optically level with the title's first line: the circle is 26px against a
+     21px line box, so it rides 2px higher than a flex-start edge would put it. */
+  flex: none;
+  margin-top: -2px;
+  display: flex;
   align-items: center;
   justify-content: center;
   width: 26px;
   height: 26px;
   border-radius: 999px;
-  border: 1px solid var(--cover-line);
+  background: var(--cover-band);
   font-size: 12.5px;
   font-weight: 700;
   color: var(--mitu-ink);
 }
 .mitu-step h3 {
-  margin: 14px 0 0;
+  margin: 0;
   font-size: 15px;
+  line-height: 1.4;
   font-weight: 700;
   color: var(--mitu-ink);
 }
@@ -473,8 +517,8 @@ pre {
   justify-content: space-between;
   gap: 20px;
   flex-wrap: wrap;
-  margin-top: 64px;
-  padding: 24px 26px;
+  margin-top: 28px;
+  padding: 22px 24px;
   border-radius: 10px;
   background: var(--cover-cta);
 }
@@ -511,9 +555,40 @@ pre {
 .mitu-cover .mitu-sec-link,
 .mitu-cover .mitu-step-n,
 .mitu-cover .mitu-card > a,
-.mitu-cover .mitu-step > a {
+.mitu-cover .mitu-step a {
   font-weight: 600;
 }
 .mitu-cover strong {
   font-weight: 500;
+}
+
+/* A section call-to-action on an ordinary docs page, matching the "Explore"
+   links on the cover. Element+class, because Fern's .fern-mdx-link sets a
+   colour and an underline at the same specificity and loads after this. */
+a.mitu-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--mitu-green-text);
+  text-decoration: none;
+}
+a.mitu-link:hover {
+  color: #0e6628;
+  text-decoration: none;
+}
+a.mitu-link .mitu-arrow {
+  transition: transform 0.15s ease;
+}
+a.mitu-link:hover .mitu-arrow {
+  transform: translateX(2px);
+}
+/* Fern wraps a link's label in a <p>; hand its colour and metrics back. */
+a.mitu-link p {
+  margin: 0;
+  font-size: inherit;
+  font-weight: inherit;
+  line-height: 1;
+  color: inherit;
 }

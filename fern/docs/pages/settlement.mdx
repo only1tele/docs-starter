@@ -1,5 +1,28 @@
 ---
-title: Payouts
+title: Settlement
+subtitle: What happens to money after it is paid to you.
 ---
 
-<Note>This page is being written. See the platform guide for the source material.</Note>
+Everything you receive lands in your Mitu balance as USDC, whoever paid it and however they paid. A card payment through `mpp_spt` and an on-chain settlement through x402 arrive in the same place.
+
+From there, two ways out:
+
+**Settle in local currency.** Converted and paid to your bank account.
+
+**Withdraw the stablecoin.** Sent on-chain to an address you control.
+
+{/* SCREENSHOT: docs/assets/platform/payments/balance-settlement.png
+     Caption: "Settle received funds to your bank account or withdraw
+     stablecoin on-chain." */}
+
+## Payer method and payout destination are separate
+
+How somebody paid you has no bearing on how you take the money out. You do not need a wallet to accept on-chain payments, and accepting cards does not tie you to a bank payout. The balance is the join between the two halves.
+
+## From the dashboard
+
+Payouts are a dashboard action, taken by a person signed in to Mitu. There is no payout endpoint in the public API, and that is deliberate: an API key that could move your balance to an arbitrary address would be a key worth stealing.
+
+<Note title="settlement.completed is not emitted yet">
+A `settlement.completed` event type exists, but nothing in the current implementation raises it. Do not build a reconciliation flow that waits for it. Reconcile against `payment.completed`, which is emitted for every payment you receive.
+</Note>

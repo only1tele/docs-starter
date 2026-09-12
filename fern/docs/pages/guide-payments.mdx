@@ -1,0 +1,422 @@
+---
+title: Create payment experiences
+subtitle: One-time payments, invoices, subscriptions and prepaid sessions, each payable by a person or an AI agent.
+---
+
+Choose the experience that matches how you charge. Use a one-time payment for a single purchase, an invoice when you need to bill a customer and track it, a subscription for recurring charges, or a session when the payer should fund a balance and draw it down.
+
+Whichever you choose, Mitu can give the payment two ways in: a checkout page a person opens, and a payment URL an agent calls. The obligation, your reference and your reconciliation stay the same either way.
+
+## What you can create
+
+| You want to | Use |
+| --- | --- |
+| Collect one payment | [A one-time payment](#one-time-payments) |
+| Bill a customer and track the lifecycle | [An invoice](#invoices) |
+| Charge on a recurring basis | [A subscription](#subscriptions) |
+| Let a payer fund a balance and draw it down | [A session](#prepaid-sessions) |
+| Charge against calls to a path | [Per-request](#per-request) |
+
+These are separate API resources, not one object wearing different hats. An invoice has line items and a lifecycle; a subscription has a plan and recurs; a payment link is a charge with two entry points. Pick by the job.
+
+## Before you begin
+
+You need a Mitu merchant account, a server-side API key, something that needs paying for, a stable reference from your own system, and a webhook endpoint for production.
+
+Keys are issued as `sk_live_...` or `sk_test_...`. Either way they stay on your server: nothing a payer touches needs one.
+
+## One-time payments
+
+The simplest case. You know the amount, and either a person or an agent will pay it.
+
+<Steps toc={true}>
+
+<Step title="Create the payment">
+
+```bash title="Request"
+curl --request POST \
+  --url https://api.mitu.ai/v1/payment-links \
+  --header "x-api-key: $MITU_API_KEY" \
+  --header "Content-Type: application/json" \
+  --data '{
+    "type": "charge",
+    "amount": 25.00,
+    "currency": "USD",
+    "description": "Invoice 8841",
+    "reference": "ORDER-8841",
+    "expiresAt": "2026-10-01T00:00:00Z",
+    "paymentMethods": ["x402", "mpp_spt"],
+    "metadata": { "order_id": "8841" }
+  }'
+```
+
+<ParamField path="type" type="charge | subscription | session | per_request" default="charge">
+  Which lifecycle this payment has.
+</ParamField>
+
+<ParamField path="amount" type="number" required={true}>
+  Required for `charge` and `per_request`. A `session` uses `sessionMaxDeposit`; a `subscription` takes its amount from the plan.
+</ParamField>
+
+<ParamField path="currency" type="string" required={true}>
+  Required except on a `subscription`, where it comes from the plan.
+</ParamField>
+
+<ParamField path="description" type="string">
+  Shown to the payer at checkout.
+</ParamField>
+
+<ParamField path="reference" type="string">
+  Your own identifier. It comes back on the payment event and is what makes reconciliation possible without storing Mitu's id. Set it.
+</ParamField>
+
+<ParamField path="expiresAt" type="string">
+  ISO 8601. After it the payment stops being payable.
+</ParamField>
+
+<ParamField path="paymentMethods" type="array">
+  Any of `x402`, `mpp_crypto`, `mpp_spt`. Constrains what an agent may settle with. Offering more than one costs nothing and widens who can pay.
+</ParamField>
+
+<ParamField path="metadata" type="object">
+  Free-form values returned intact. Not a place for secrets.
+</ParamField>
+
+</Step>
+
+<Step title="Take both entry points">
+
+The response carries `checkoutUrl`. Both URLs arrive together on `link.created`:
+
+```json title="link.created"
+{
+  "payment_link_id": "pay_n8d7piu1yc6h",
+  "type": "charge",
+  "amount": "25.00",
+  "currency": "USD",
+  "reference": "ORDER-8841",
+  "url": {
+    "checkout": "https://mitu.ai/pay/pay_n8d7piu1yc6h",
+    "agent": "https://api.mitu.ai/pay/pay_n8d7piu1yc6h"
+  }
+}
+```
+
+<Warning title="They are not interchangeable">
+The checkout URL is a page served from the web app. The agent URL answers a payment requirement from the API. Send an agent the checkout URL and it gets HTML where it expected a challenge; open the agent URL in a browser and there is no page to pay on.
+</Warning>
+
+</Step>
+
+<Step title="Let a person pay">
+
+They open the checkout URL, see who is charging them, what for, how much, and the methods available, and pay. `link.viewed` fires when the page is opened.
+
+{/* SCREENSHOT: docs/assets/integration-guides/payments/human-checkout.png
+     Caption: "A person opens the checkout URL and pays." Use the real
+     checkout. */}
+
+</Step>
+
+<Step title="Let an agent pay">
+
+```text
+GET  https://api.mitu.ai/pay/pay_n8d7piu1yc6h   answers 402 with the challenges
+POST https://api.mitu.ai/pay/pay_n8d7piu1yc6h   takes the signed credential
+```
+
+The 402 states the amount and lists the methods you accepted. It is not a decline: it is the protocol saying what must happen for the payment to continue.
+
+You do not implement anything for this. Mitu handles the settlement underneath. [Payment methods](/platform/payments/agent-payments) covers what an agent can pay with, if you want the detail.
+
+</Step>
+
+<Step title="Reconcile">
+
+```text
+payment.completed  ->  reference: ORDER-8841  ->  your row  ->  mark it paid
+```
+
+Your handler does not branch on who paid. Read `reference`, find the record, mark it.
+
+Do not mark anything paid from the payer's browser or from what an AI client reported. Use the verified webhook, or read the state back from the API.
+
+</Step>
+
+<Step title="Read and update">
+
+```text
+GET    /v1/payment-links       list, filtered by type, status, reference or source
+GET    /v1/payment-links/{id}  read one
+PATCH  /v1/payment-links/{id}  amend one
+DELETE /v1/payment-links/{id}/cancel
+```
+
+Filtering the list by your own `reference` answers "is there already a payment for this order" without you having stored Mitu's id.
+
+`PATCH` changes `expiresAt`, `description`, `reference` and `metadata`. It does **not** change the amount or currency: to charge a different figure, cancel and create another, so a payment somebody is already looking at cannot change price under them.
+
+</Step>
+
+</Steps>
+
+### The lifecycle
+
+```text
+pending -> active -> paid -> settled
+                  \-> expired
+                  \-> cancelled
+```
+
+`partial` and `settling` also appear, for payments part-funded or mid-settlement.
+
+## Invoices
+
+Use an invoice when a payment link would be too thin: line items, tax, a discount, a due date, an invoice number, and a record that moves through states rather than simply being paid.
+
+```bash title="Create"
+curl --request POST \
+  --url https://api.mitu.ai/v1/invoices \
+  --header "x-api-key: $MITU_API_KEY" \
+  --header "Content-Type: application/json" \
+  --data '{
+    "customerId": "cus_ds9hazr8jd3l",
+    "invoiceNumber": "INV-2026-441",
+    "description": "Design services, September",
+    "currency": "USD",
+    "lineItems": [
+      { "name": "Design retainer", "quantity": 1, "amount": 1200.00 },
+      { "name": "Additional revisions", "description": "3 rounds",
+        "quantity": 3, "amount": 150.00 }
+    ],
+    "taxAmount": 123.75,
+    "discountAmount": 0,
+    "dueAt": "2026-10-01T00:00:00Z"
+  }'
+```
+
+An invoice is addressed to a customer, so `customerId` is required. Each line carries `name`, `quantity`, `amount` and an optional `description`.
+
+```text
+POST   /v1/invoices             create a draft
+POST   /v1/invoices/{id}/send   send it to the customer
+GET    /v1/invoices             list
+GET    /v1/invoices/{id}        read one
+PATCH  /v1/invoices/{id}        amend
+DELETE /v1/invoices/{id}/cancel cancel
+```
+
+Creating and sending are separate calls, so a draft can be checked or corrected before the customer ever sees it.
+
+A sent invoice is payable the same two ways, on the `/invoice/` segment:
+
+```text
+https://mitu.ai/invoice/inv_5v6nxq2zlk9mpd8t
+https://api.mitu.ai/invoice/inv_5v6nxq2zlk9mpd8t
+```
+
+`invoice.created`, `invoice.sent` and `invoice.paid` are emitted. `payment.completed` also fires when the money arrives, carrying `source: "invoice"`.
+
+<Note title="Two declared invoice events are not emitted">
+`invoice.viewed` and `invoice.overdue` exist as event types but nothing raises them today. Do not build dunning on `invoice.overdue`: derive overdue from `dueAt` and the paid state.
+</Note>
+
+## Subscriptions
+
+A plan describes what recurs. A subscription attaches a payer to one.
+
+```bash title="Create a plan"
+curl --request POST \
+  --url https://api.mitu.ai/v1/subscription-plans \
+  --header "x-api-key: $MITU_API_KEY" \
+  --data '{
+    "name": "Pro",
+    "description": "Unlimited lookups and priority support",
+    "amount": 49.00,
+    "currency": "USD",
+    "billingInterval": "month",
+    "features": ["Unlimited lookups", "Priority support"]
+  }'
+```
+
+```bash title="Subscribe someone"
+curl --request POST \
+  --url https://api.mitu.ai/v1/subscriptions \
+  --header "x-api-key: $MITU_API_KEY" \
+  --data '{
+    "subscriptionPlanId": "plan_7h2kq9xz",
+    "paymentMethod": "mpp_crypto",
+    "subscriberId": "cus_ds9hazr8jd3l",
+    "subscriberType": "user"
+  }'
+```
+
+`billingInterval` is `day`, `week`, `month` or `year`. A subscription is `active`, `past_due`, `paused`, `cancelled` or `expired`, and each charge produces an invoice of its own.
+
+<Warning title="Recurring charges settle over MPP only">
+`paymentMethod` takes `mpp_crypto` or `mpp_spt`. An x402 authorisation is signed for one specific amount and recipient, so it cannot carry a future charge, and passing `x402` is rejected.
+</Warning>
+
+```text
+POST /v1/subscriptions/{id}/cancel    stop it
+GET  /v1/subscriptions/{id}/invoices  what it has generated
+```
+
+To let a payer choose, create a payment link of type `subscription` carrying a `planId`, or several through `planIds` with `allowCustomerChoice`. Amount and currency come from the plan rather than the link.
+
+`plan.created`, `subscription.created`, `subscription.charged`, `subscription.past_due` and `subscription.cancelled` are all emitted.
+
+## Prepaid sessions
+
+A payment link of type `session` has the payer fund a balance up front and draw it down across many calls, rather than settling each one.
+
+```json
+{
+  "type": "session",
+  "currency": "USD",
+  "sessionMaxDeposit": 50.00,
+  "sessionExpiresAt": "2026-10-01T00:00:00Z",
+  "reference": "SESSION-8841"
+}
+```
+
+`sessionMaxDeposit` replaces `amount` here, and is the ceiling on what may be locked.
+
+```text
+session.opened   the deposit, the max, the on-chain channel and the tx hash
+session.closed   what was spent, what was refunded, and its own tx hash
+```
+
+Use it where a payment per call would dominate the exchange: long or chatty interactions, metered work, anything where the payer would rather commit once.
+
+## Per request
+
+A link of type `per_request` prices calls against a path pattern, set with `endpointPattern`.
+
+If what you want is to charge for calls to your API, [selling your API to agents](/guides/use-cases/api-monetisation) is the fuller treatment and [accept payments from agents](/guides/integration-guides/accept-payment-from-agents) the implementation. A `per_request` link is the standalone version of the same idea.
+
+## Human and agent payers
+
+You do not implement two payment systems.
+
+```text
+A person   opens the checkout and pays with what is available to them
+An agent   calls the payment URL, reads the 402, and settles it
+```
+
+Both produce `payment.completed` carrying your `reference`. The protocols underneath differ; your reconciliation does not.
+
+<Note title="The agent protocols are not your problem">
+x402 and MPP are how Mitu settles an agent's payment. You accept them by listing them in `paymentMethods`, and nothing in your backend has to know how either works.
+</Note>
+
+## Webhooks
+
+Production payment state comes from webhooks, not from a browser, an AI client or the dashboard.
+
+```json title="Every event shares this envelope"
+{
+  "event": "payment.completed",
+  "event_id": "evt_a8f1zq5xkm2lcn6f",
+  "event_created_at": "2026-09-09T14:22:57.003Z",
+  "event_data": { }
+}
+```
+
+```http
+Content-Type: application/json
+X-Mitu-Signature: v1,t=1788990420,sig=<hmac-sha256>
+```
+
+<Warning title="whsec_ and mps_ sign opposite directions">
+`whsec_...` signs webhook deliveries Mitu sends you, and is the one that matters here. `mps_...` signs requests Mitu forwards to your API on an agent's behalf. Verifying a webhook with the wrong secret fails every delivery, and usually gets diagnosed as a delivery problem rather than a key problem.
+</Warning>
+
+Mitu attempts each delivery up to five times with backoff. **Every attempt carries the same `event_id`**, because a retry is the same event arriving again rather than a new one, so deduplicating on it is what stops one payment being applied twice. Answer `2xx` to acknowledge; anything else is retried, and after the last attempt the delivery is abandoned and can be resent by hand.
+
+The Test button sends a real delivery, recorded in the log like any other, so what you test is what production sends.
+
+## Reconciliation
+
+```text
+Set reference at creation
+        |
+payment.completed arrives carrying it
+        |
+Verify the signature, check event_id
+        |
+Find your own record, mark it paid
+```
+
+Set `reference` to something your system already knows: `ORDER-8841`, `INV-2026-441`, `BOOKING-9832`. Without it, every reconciliation has to start from a Mitu id you had to store and keep in step.
+
+### Payment state is not fulfilment state
+
+Being paid and having delivered are two different questions, and `payment.completed` answers only the first. On a paid API call it carries `delivered`, which answers the second. Keep them as separate fields in your own records: a payment that settled against work you did not do is money owed, not revenue. See [paid but not delivered](/platform/payments/agent-payments).
+
+## Failures
+
+`payment.failed` fires when a payment was attempted and did not complete, with a `reason`:
+
+```text
+no_supported_method    the payer could satisfy none of the methods you accept
+insufficient_balance   they did not have the funds
+over_limit             a wallet limit stopped it
+settlement_failed      the settlement itself did not go through
+upstream_rejected      refused upstream
+```
+
+They call for different responses. `no_supported_method` usually means the methods on the payment are too narrow for the payers reaching you; `settlement_failed` is worth retrying.
+
+## Settlement
+
+Everything you receive lands in your Mitu balance as USDC, whoever paid and however. From there you settle in local currency to your bank account, or withdraw the stablecoin on-chain.
+
+How somebody paid has no bearing on how you take the money out. Payouts are a dashboard action; there is no payout endpoint in the public API, because a key that could move your balance to an arbitrary address would be a key worth stealing.
+
+<Note title="settlement.completed is not emitted">
+The event type exists but nothing raises it. Reconcile against `payment.completed`.
+</Note>
+
+[Payouts](/platform/payments/settlement) covers both routes.
+
+## Worked examples
+
+<Steps>
+
+<Step title="A one-time order">
+Create a `charge` for the order total with `reference: ORDER-8841`. Send the checkout URL in the confirmation email. When `payment.completed` arrives, find `ORDER-8841` and release the order.
+</Step>
+
+<Step title="An invoice">
+Create the invoice against the customer with line items and a due date, then send it. The customer pays at the checkout URL, or forwards it to an assistant that pays the agent URL. `invoice.paid` and `payment.completed` both arrive; you mark the invoice settled against your own number.
+</Step>
+
+<Step title="A subscription">
+Create a `Pro` plan at \$49 a month. Subscribe the customer with `mpp_crypto`. Each cycle produces an invoice and a `subscription.charged` event; a failure produces `subscription.past_due`, which is your cue to tell them.
+</Step>
+
+</Steps>
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Payment links" icon="regular link" href="/platform/payments/payment-experiences">
+    Every field and both entry points.
+  </Card>
+  <Card title="Invoices" icon="regular file-invoice" href="/platform/payments/invoices">
+    Line items, lifecycle and events.
+  </Card>
+  <Card title="Subscriptions" icon="regular arrows-rotate" href="/platform/payments/subscriptions">
+    Plans, states and generated invoices.
+  </Card>
+  <Card title="Accept payments from humans and AI agents" icon="regular rocket" href="/guides/use-cases/universal-payments">
+    The same journey as a use case.
+  </Card>
+  <Card title="Webhooks" icon="regular bell" href="/platform/webhooks/overview">
+    Delivery, signing and retries.
+  </Card>
+  <Card title="Payouts" icon="regular building-columns" href="/platform/payments/settlement">
+    Bank settlement and on-chain withdrawal.
+  </Card>
+</CardGroup>

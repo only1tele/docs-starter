@@ -1,6 +1,97 @@
 ---
 title: Get set up with Mitu
-subtitle: Create an account, get an API key, point Mitu at your API.
+subtitle: A key, and your first authenticated request.
 ---
 
-<Note>This page is being written. See the platform guide for the source material.</Note>
+<Steps>
+
+<Step title="Create an API key">
+
+API keys are created from the dashboard, under **API keys**. They look like this:
+
+```text
+sk_live_…
+sk_test_…
+```
+
+<Warning title="The key is shown once">
+Only a hash and the visible prefix are stored, so a leaked database leaks no working keys, and nobody can reveal the full value again. Copy it when it is created and store it somewhere you would keep any other credential.
+
+If you lose one, create another and revoke the old. Revocation takes effect immediately.
+</Warning>
+
+{/* SCREENSHOT: docs/assets/guides/quick-start/api-key-create.png
+     Caption: "Creating a key, and its one-time reveal." The key itself must
+     be a clearly non-production value. */}
+
+</Step>
+
+<Step title="Store it as an environment variable">
+
+```bash
+export MITU_API_KEY="sk_test_…"
+```
+
+Or wherever your application keeps configuration. Not in your source, and not in anything a browser or an AI client can read.
+
+</Step>
+
+<Step title="Make your first request">
+
+`ping` exists to answer one question, with no side effects: does this key work?
+
+```bash title="Request"
+curl --request GET \
+  --url https://api.mitu.ai/v1/ping \
+  --header "x-api-key: $MITU_API_KEY"
+```
+
+```json title="200 OK"
+{
+  "ok": true,
+  "account_id": "acc_8f21c4d9b7e3",
+  "api_key_id": "key_3a6f9d2a6bbc",
+  "environment": "test",
+  "scopes": []
+}
+```
+
+Reaching it at all proves the key was accepted. The body shows what it resolved to, so a `200` against the wrong account is distinguishable from a `200` against the right one. Check `account_id` is the account you meant.
+
+The call is recorded in your API logs like any other public request, which makes it the cheapest way to confirm logging is working too.
+
+</Step>
+
+<Step title="Understand test and live">
+
+```text
+sk_test_…   a test key
+sk_live_…   a live key
+```
+
+The environment travels with the key and comes back on `ping`, so you can always tell which one a request used.
+
+<Warning title="Test keys are not a separate sandbox">
+The environment is a property of the key rather than an isolated set of data. Do not assume resources created with a test key are invisible to a live one, or that payments made with it are simulated. Use a separate account if you need genuine isolation, and ask us if you are unsure which applies to a flow you are building.
+</Warning>
+
+</Step>
+
+</Steps>
+
+## Next
+
+<CardGroup cols={2}>
+  <Card title="Create your first customer" icon="regular user" href="/guides/quick-start/create-your-first-customer">
+    The record everything else hangs off.
+  </Card>
+  <Card title="Issue your first wallet" icon="regular wallet" href="/guides/quick-start/issue-your-first-wallet">
+    A pot their agent can spend from.
+  </Card>
+  <Card title="Accept your first payment" icon="regular credit-card" href="/guides/quick-start/accept-your-first-payment">
+    One charge, either kind of payer.
+  </Card>
+  <Card title="Configure webhooks" icon="regular bell" href="/guides/quick-start/configure-webhooks">
+    Find out what happened, reliably.
+  </Card>
+</CardGroup>

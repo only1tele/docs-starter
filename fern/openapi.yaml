@@ -11,7 +11,7 @@ servers:
 security:
   - ApiKey: []
 paths:
-  /economy/v1/public/ping:
+  /v1/ping:
     get:
       operationId: ping
       summary: Check a key

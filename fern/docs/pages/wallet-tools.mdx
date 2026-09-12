@@ -1,5 +1,88 @@
 ---
 title: Wallet tools
+subtitle: The four tools a customer's agent gets once Mitu knows who is connected, and the boundary around them.
 ---
 
-<Note>This page is being written. See the platform guide for the source material.</Note>
+Wallet tools appear alongside your own endpoint tools, for the customer the connection is authenticated as. A connection with no identified customer gets none of them, and a customer with no wallet has nothing for them to report.
+
+## list_wallets
+
+No arguments. Returns the names of the wallets that customer holds.
+
+Names only. The wallet id is not returned, because a wallet is chosen by name everywhere else in these tools and printing the id invites a model to pass it back as though it were the label the customer uses. Nothing is added to the list either: a name that cannot be paid from is how an agent ends up asking for a wallet the customer does not have.
+
+## get_balance
+
+<ParamField path="wallet" type="string">
+  Wallet name. Omit to see every wallet.
+</ParamField>
+
+Returns the balance, summed across networks.
+
+Omitting the name with several wallets returns all of them rather than an error. Reading is not the dangerous operation: a balance is a question with a complete answer, and it is paying from the wrong pot that does damage.
+
+## get_address
+
+<ParamField path="wallet" type="string">
+  Wallet name. Omit if the customer only has one.
+</ParamField>
+
+Returns where to send funds, labelled by chain:
+
+```text
+base: 0xd7Ca1fdA...
+tempo: 0xd7Ca1fdA...
+solana: 3c6SpTNK...
+```
+
+Labelled rather than handed over as one bare string, because an address does not say what it can receive. Base and Tempo share the EVM address and Solana's is different, and USDC sent on a chain an address cannot receive on is not recoverable.
+
+## pay
+
+<ParamField path="endpoint" type="string" required={true}>
+  A path on your own service, as named in the 402. For example `/orders`.
+</ParamField>
+
+<ParamField path="method" type="string" default="GET">
+  The HTTP method.
+</ParamField>
+
+<ParamField path="body" type="object">
+  The request body, where the method takes one.
+</ParamField>
+
+<ParamField path="wallet" type="string">
+  Wallet name. Omit if the customer only has one.
+</ParamField>
+
+Checks the balance and the spending limits, settles, and returns what your endpoint answered.
+
+<Warning title="The destination is a path, not a URL">
+`pay` takes a path on the merchant this connection belongs to, and Mitu builds the URL. An agent cannot point it anywhere else. A tool that paid an arbitrary address supplied by a model would be one a prompt injection could aim wherever it liked, and it reads to every client-side safety check as exactly that.
+</Warning>
+
+A payment that would take the wallet past its monthly limit is not refused outright. It is held, an approval request is raised for the customer, and the tool answers `pending_approval` with the amount.
+
+A payment that settles but is then refused by your endpoint answers `settled_not_delivered`, which the agent must not report as "nothing was charged". See [paid but not delivered](/platform/payments/agent-payments).
+
+## Naming a wallet
+
+```text
+One wallet       the agent need not name it
+Several wallets  it must, for get_address and pay
+Unknown name     refused, with no fallback to a default
+```
+
+Refusing when no name is given is a safety property rather than a limitation. Choosing a pot on somebody's behalf is how money meant for travel buys office supplies. `get_balance` is the deliberate exception, because reading every balance harms nothing.
+
+## What an agent cannot do
+
+```text
+create a wallet
+move money between wallets
+withdraw
+change a spending limit
+pay from a wallet it was not given
+```
+
+Each of those is a decision that belongs to you or to your customer. [Agent Wallets](/platform/agent-wallets/overview) covers where those decisions are made.

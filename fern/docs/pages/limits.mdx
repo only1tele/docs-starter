@@ -1,5 +1,60 @@
 ---
 title: Limits and controls
+subtitle: What a wallet may spend, and what applies to the customer as a whole.
 ---
 
-<Note>This page is being written. See the platform guide for the source material.</Note>
+Three controls are carried on a wallet. All amounts are in USD, while the balance itself is USDC, which is why the limits object says which currency it is in.
+
+<ParamField path="monthly" type="number">
+  The most this wallet may spend in a calendar month, across every payment. A payment that would take the wallet past it is held for the customer to approve rather than refused.
+</ParamField>
+
+<ParamField path="per_payment" type="number">
+  The intended ceiling for a single payment. Stored and returned, but not currently read by the payment path.
+</ParamField>
+
+<ParamField path="approve_above" type="number">
+  The intended threshold above which a payment should wait for the customer. Stored and returned, but not currently read by the payment path.
+</ParamField>
+
+<Warning title="Only the monthly limit currently gates a payment">
+`monthly` is the control that changes what happens today. `per_payment` and `approve_above` are accepted on create, stored, and returned on the wallet and on `wallet.created`, but nothing in the payment path reads them yet. Do not present either to your customers as an enforced control until that changes.
+</Warning>
+
+## What happens at the limit
+
+Exceeding the monthly limit does not fail the payment. Mitu holds it, raises an approval request for the customer, and the agent's `pay` tool answers `pending_approval` with the amount rather than a settlement. The payment proceeds if the customer approves it.
+
+## Zero means no limit
+
+Zero is not a limit of zero. A control set to zero is off, and that amount is unbounded. To stop a wallet spending, freeze the customer rather than setting a limit to zero.
+
+Limits you omit when creating a wallet are inherited from the limits that customer already has. Omitted does not mean unlimited either.
+
+## Per wallet, per customer
+
+Limits are per wallet. A freeze, or a blocked destination, is per customer and applies everywhere they spend.
+
+That split is deliberate, and the dashboard reflects it: the customer's status sits above the wallet switcher and the limits below it, because one belongs to the person and the others to the pot.
+
+## Examples
+
+These are illustrative configurations, not recommended figures. What is right depends on what the wallet is for.
+
+```json title="Everyday spending"
+{
+  "per_payment": 50,
+  "monthly": 500,
+  "approve_above": 100
+}
+```
+
+```json title="Travel"
+{
+  "per_payment": 500,
+  "monthly": 3000,
+  "approve_above": 750
+}
+```
+
+A wallet whose `approve_above` is below its `per_payment` will hold larger payments for approval rather than refusing them. A wallet whose `approve_above` is above `per_payment` will never hold anything, because everything large enough to need approval is refused first.

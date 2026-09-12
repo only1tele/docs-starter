@@ -1,0 +1,110 @@
+---
+title: Buying through the Mitu MCP
+subtitle: One connection that lets an agent find services across the platform, call them, and pay for the ones that charge.
+---
+
+Two different MCPs carry the Mitu name, and they face opposite directions.
+
+**Your own MCP** exposes your endpoints to other people's agents. That is the seller side, covered on [the MCP](/platform/mcp/overview).
+
+**The Mitu MCP** is the platform's own, and it is what an agent connects to in order to buy. One connection reaches every service listed on the platform, so an agent does not connect to each merchant separately.
+
+```text
+https://mcp.mitu.ai/mcp
+```
+
+## Connecting
+
+Discovery is anonymous: `search_services` and `get_service` work with no credential at all, so an agent can browse before anybody commits to anything. Every other tool answers 401 with a `WWW-Authenticate` header, which is what makes a client offer to connect rather than simply fail.
+
+To act, the agent sends a Mitu account key:
+
+```http
+Authorization: Bearer sk_...
+```
+
+The money spent is that account's own balance, governed by that account's spending limits.
+
+<Note title="This is a different wallet from an Agent Wallet">
+An [Agent Wallet](/platform/agent-wallets/overview) is a pot a merchant issues to one of its customers, used inside that merchant's own MCP. The balance behind the Mitu MCP is the connected account's own. Both are controlled spending; they differ in whose account holds the money.
+</Note>
+
+## Finding something to buy
+
+### search_services
+
+<ParamField path="query" type="string">
+  Free text, such as `pizza delivery` or `company data`.
+</ParamField>
+
+<ParamField path="category" type="string" />
+
+<ParamField path="limit" type="number">
+  1 to 50.
+</ParamField>
+
+Returns matching services by handle, with a verification mark where the service is verified.
+
+### get_service
+
+<ParamField path="handle" type="string" required={true}>
+  A service handle, such as `@pizzashop`.
+</ParamField>
+
+Returns the service's instructions and its callable endpoints, each with its method, path, price or pricing type, `when_to_use`, and any prerequisites. Call this before calling an endpoint: it is where the endpoint names and the prices come from.
+
+## Buying
+
+### call_endpoint
+
+<ParamField path="service" type="string" required={true}>
+  The service handle.
+</ParamField>
+
+<ParamField path="endpoint" type="string" required={true}>
+  The endpoint name from `get_service`, such as `get_menu`.
+</ParamField>
+
+<ParamField path="params" type="object" />
+
+<ParamField path="body" type="unknown" />
+
+<ParamField path="method" type="x402 | mpp_crypto | mpp_spt">
+  Preferred payment method, if the endpoint charges.
+</ParamField>
+
+Free endpoints return their data. Paid ones settle from the connected account's wallet, subject to its spending limits, and return the result. The agent signs nothing itself: the 402, the balance check, the signature and the retry all happen inside the call.
+
+### pay
+
+<ParamField path="url" type="string" required={true}>
+  Any 402-protected URL.
+</ParamField>
+
+<ParamField path="method" type="string" default="GET" />
+
+<ParamField path="body" type="object" />
+
+<ParamField path="preferredMethod" type="x402 | mpp_crypto | mpp_spt" />
+
+For paid URLs that are not listed services. `call_endpoint` is the better route for anything on the platform, because it carries the service's own description and price.
+
+### send_money
+
+<ParamField path="to" type="string" required={true}>
+  Recipient address.
+</ParamField>
+
+<ParamField path="amount" type="number" required={true}>
+  USDC.
+</ParamField>
+
+Subject to the same limits. Large amounts are held for approval.
+
+## Knowing where you stand
+
+`get_balance` returns the account's USDC balance summed across networks. `get_address` gets or creates the address to fund it on Base. `spending_limits` returns daily and monthly spend so far and how much room is left before a payment needs approval. `list_transactions` returns recent activity. `verify_payment` checks the status of a payment link by id.
+
+## The limits
+
+Spending is gated by the account's own daily and monthly limits. A payment that would exceed one is not refused: it is held, an approval request is raised, and the tool reports that rather than a settlement. [Limits and controls](/platform/agent-wallets/limits-and-controls) covers the semantics.

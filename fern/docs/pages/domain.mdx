@@ -1,5 +1,58 @@
 ---
-title: Domain and integration
+title: Domains
+subtitle: Where agents reach you, and where Mitu forwards what they ask for.
 ---
 
-<Note>This page is being written. See the platform guide for the source material.</Note>
+## Integration
+
+Two settings decide what Mitu does with a call once an agent makes it.
+
+```text
+API base URL        https://api.yoursite.com
+Health check path   polled, so the dashboard can show whether your API is up
+Customer sign-in    off, or your own OAuth
+```
+
+You give Mitu no credential for your API. Every forwarded request is signed with a secret Mitu issues to you, and that signature is what proves a call is genuine. See [request signature verification](/platform/security/request-verification).
+
+Turn customer sign-in on and your customers authenticate with the credentials they already have. Mitu forwards their access token with every request, so your existing endpoint keeps working unchanged. [MCP authentication](/platform/mcp/authentication) covers both methods.
+
+{/* SCREENSHOT: docs/assets/platform/mcp/integration-api.png
+     Caption: "The Integration page, with the sign-in switch on and the OAuth
+     fields showing." No secrets visible. */}
+
+## Your own domain
+
+By default agents reach you at a Mitu URL. Claim your own and they reach you at yours instead:
+
+```text
+https://mcp.yourdomain.com/mcp
+```
+
+<Steps>
+
+<Step title="Add the domain">
+Enter the hostname you want to use on the **Domain** page.
+</Step>
+
+<Step title="Add the DNS records">
+Mitu shows the records to create. Add them with your DNS provider exactly as given.
+</Step>
+
+<Step title="Verify ownership">
+Ownership is proved by a TXT lookup. Verification can be retried while DNS propagates.
+</Step>
+
+<Step title="Wait for the certificate">
+The certificate is issued after verification succeeds.
+</Step>
+
+<Step title="Use the new URL">
+Give customers the custom URL. Until verification and the certificate are both done, the Mitu URL keeps working, so nothing breaks while you wait.
+</Step>
+
+</Steps>
+
+{/* SCREENSHOT: docs/assets/platform/mcp/domain.png
+     Caption: "The Domain page mid-verification, showing the DNS records."
+     Use example values, not a real zone. */}

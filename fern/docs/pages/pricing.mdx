@@ -1,0 +1,153 @@
+---
+title: Pricing
+subtitle: How the amount for a paid operation is decided.
+---
+
+Price is a property of the endpoint, not of the payer. The `pricing_type` you set decides whether a call produces a payment requirement at all, and where the figure comes from.
+
+```text
+free      no charge, and no 402
+fixed     a set price per call
+dynamic   you quote per call
+tiered    rules by volume or size
+session   the caller funds a balance and draws it down
+```
+
+## free
+
+The agent calls the tool and gets the result. No challenge, no settlement.
+
+Use it for anything a customer could read without paying in your own product: a catalogue, availability, delivery zones, status. In a commerce flow it is what lets an agent gather enough to decide before anything commits.
+
+Free is not the same as public. [`requires_auth`](/platform/mcp/endpoints) is a separate setting, so a free endpoint can still require a signed-in customer.
+
+<Note title="A free call still reaches you signed">
+It carries `x-mitu-signature`, `x-mitu-request-id` and `x-mitu-agent-id`, and `x-mitu-amount-charged` reading `0`. Free endpoints are rate limited per endpoint at `rate_limit_per_minute`, default 60.
+</Note>
+
+## fixed
+
+A set `price` per call, the same every time. Mitu answers the 402 itself, and your API is called once, already paid.
+
+```text
+The agent calls
+        |
+Mitu knows the price and answers 402
+        |
+The agent pays
+        |
+The paid request reaches you
+```
+
+Use it when the cost of serving does not vary: a lookup, a single record, a fixed report, a known digital resource.
+
+## dynamic
+
+For operations where the amount depends on the request: a report priced by size, processing priced by record count, a delivery fee, an order total.
+
+Mitu calls your endpoint **twice**, and one header tells the calls apart.
+
+```text
+1. QUOTE   Called WITHOUT x-mitu-amount-charged.
+           Work out the price. Reply 402 with it. Do no work.
+
+2. PAID    After settlement, called again WITH the header.
+           Verify the signature. Do the work.
+```
+
+### The quote
+
+```http
+POST /orders
+x-mitu-signature: t=1757601046,v1=9f3c4a…
+x-mitu-request-id: req_5f13b916
+```
+
+Answer `402` with the price:
+
+```json
+{ "amount": "43.20", "currency": "USD" }
+```
+
+<ParamField path="amount" type="string" required={true}>
+  `price` is accepted as a synonym. It must match `^\d+(\.\d+)?$` and be greater than zero, so no currency symbol, no thousands separator, no negative and no exponent. `"43.20"` is valid; `"\$43.20"`, `"43,20"` and `"0"` are not.
+</ParamField>
+
+<ParamField path="currency" type="string">
+  Falls back to the endpoint's configured currency, then to `USD`.
+</ParamField>
+
+Two behaviours are worth knowing. Answering anything **other than** `402` relays your response to the agent as-is, which is how a dynamic endpoint can decide a particular request is free. And answering `402` with a body Mitu cannot read as a price gives the agent `502 invalid-quote`, not your response.
+
+<Warning title="Do no work during the quote">
+The quote runs on every call, before any money moves. Creating the order, generating the report or reserving the stock there means doing it for nothing every time, and doing it twice when the paid leg arrives. The absence of `x-mitu-amount-charged` is the only signal, and it is sufficient.
+</Warning>
+
+### The sequence
+
+```text
+Agent                 Mitu                 Your API
+  |                     |                     |
+  | call the tool       |                     |
+  |-------------------->|                     |
+  |                     | quote request       |
+  |                     | (no amount header)  |
+  |                     |-------------------->|
+  |                     |       402 + price   |
+  |                     |<--------------------|
+  | 402 + requirement   |                     |
+  |<--------------------|                     |
+  |                     |                     |
+  | settle a challenge  |                     |
+  |-------------------->|                     |
+  |                     | paid request        |
+  |                     | (amount header set) |
+  |                     |-------------------->|
+  |                     |              result |
+  |                     |<--------------------|
+  | result              |                     |
+  |<--------------------|                     |
+```
+
+### Handling both legs
+
+```js
+const amount = req.get('x-mitu-amount-charged')
+
+if (!amount) {
+  // Quote only. Price it, return 402, and touch nothing.
+  return res.status(402).json({ amount: priceFor(req.body), currency: 'USD' })
+}
+
+if (!verify(req, SIGNING_SECRET)) return res.sendStatus(401)
+return res.json(await doTheWork(req.body))
+```
+
+Verify on the paid leg before acting. `x-mitu-amount-charged` is a plain header and proves nothing on its own.
+
+## tiered
+
+Rules by volume or size, so the price per call falls as usage rises, or scales with what was asked for.
+
+Use it for metered work where a flat per-call price would be wrong at both ends of the range.
+
+## session
+
+The caller funds a session up front and draws it down across calls, rather than settling each one separately. `session.opened` records the deposit and the on-chain channel; `session.closed` records what was spent and what was refunded.
+
+Use it for long or chatty interactions where a payment per call would dominate the exchange. A [payment link](/platform/payments/payment-experiences) of type `session` is the standalone version of the same idea.
+
+## Changing a type
+
+Changing `pricing_type` takes effect on the next call. Agents read the price from the tool list at connection time, so a client already connected may quote the old figure until it reconnects. An endpoint whose price moves often is better served by `dynamic`, which is quoted per call and never stale.
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="Agent payments" icon="regular credit-card" href="/platform/payments/agent-payments">
+    What happens once a price is set.
+  </Card>
+  <Card title="MCP endpoints" icon="regular list-check" href="/platform/mcp/endpoints">
+    Where `pricing_type` and `price` live.
+  </Card>
+</CardGroup>

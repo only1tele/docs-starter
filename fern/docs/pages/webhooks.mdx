@@ -1,5 +1,41 @@
 ---
 title: Webhooks
+subtitle: How Mitu delivers events to your backend, and how to verify and deduplicate them.
 ---
 
-<Note>This page is being written. See the platform guide for the source material.</Note>
+Add an endpoint, choose which events it should receive, and Mitu delivers to it. [Events](/platform/webhooks/events) lists what can be sent.
+
+## Signing
+
+Each webhook endpoint gets its own secret, `whsec_...`.
+
+```http
+X-Mitu-Signature: v1,t=1788990420,sig=<hmac-sha256>
+Content-Type: application/json
+```
+
+<Warning title="Two secrets, two directions">
+`whsec_...` signs webhook deliveries Mitu sends to you. `mps_...`, described on [request signature verification](/platform/security/request-verification), signs requests Mitu makes to your API on an agent's behalf. They are different secrets for opposite directions, and each endpoint's deliveries must be verified with that endpoint's own secret.
+</Warning>
+
+## Delivery and retries
+
+Mitu attempts a delivery up to five times, with backoff. Every attempt carries the same `event_id`, because a retry is the same event arriving again rather than a new one.
+
+```text
+Deduplicate on event_id.
+```
+
+Answer `2xx` to acknowledge. Anything else counts as a failure and is retried. After the final attempt the delivery is abandoned, and you can resend it by hand from the dashboard.
+
+## Testing
+
+The Test button sends a real delivery, recorded in the log like any other, so what you test is what production sends.
+
+{/* SCREENSHOT: docs/assets/platform/webhooks/endpoint.png
+     Caption: "A webhook endpoint: subscribed events, secret and recent
+     deliveries." The secret must be masked. */}
+
+## Logs
+
+Every attempt is recorded with its status and response, so a delivery that failed can be inspected rather than guessed at. See [keys, secrets and logs](/platform/security/keys-and-secrets).

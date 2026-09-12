@@ -1,5 +1,58 @@
 ---
-title: Customers through OAuth
+title: OAuth
+subtitle: What happens to the customer record when somebody signs in with your own identity provider.
 ---
 
-<Note>This page is being written. See the platform guide for the source material.</Note>
+With customer sign-in enabled, you do not create customers in advance. The record is made the first time somebody signs in.
+
+```text
+Customer adds your MCP URL to their client
+        |
+Client discovers the OAuth configuration
+        |
+Customer signs in with your identity provider
+        |
+Mitu receives the identity
+        |
+Mitu creates or maps the customer from sub
+        |
+customer.created
+        |
+You can now act on that customer, including issuing a wallet
+```
+
+## The record that results
+
+```json title="customer.created data"
+{
+  "source": "oauth",
+  "client_reference_id": "<oauth-sub>"
+}
+```
+
+`client_reference_id` is populated from the identity provider's `sub`, so the Mitu customer maps back to the same user your own system knows. Store the pairing of that `sub` and the Mitu customer id if you will later act on the customer from your backend.
+
+## What this does not do
+
+<Note title="Signing in does not create a wallet">
+A wallet exists only because you created one through the API. OAuth sign-in creates a customer and nothing more. Issuing a wallet remains an explicit merchant action, because a wallet costs real addresses to fund and splits a customer's money across pots.
+</Note>
+
+No prior `POST /v1/customers` call is required or expected in this flow. Creating the customer yourself and then having the same person sign in through OAuth produces two records unless the `client_reference_id` you used already matches their `sub`.
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="MCP authentication" icon="regular key" href="/platform/mcp/authentication">
+    The discovery surface and the two authentication methods.
+  </Card>
+  <Card title="Customers" icon="regular user" href="/platform/customers/customer-api">
+    The customer record and how to read it back.
+  </Card>
+  <Card title="Agent Wallets" icon="regular wallet" href="/platform/agent-wallets/overview">
+    Issuing a wallet to a customer once they exist.
+  </Card>
+  <Card title="Events" icon="regular bell" href="/platform/webhooks/events">
+    Everything Mitu sends, including `customer.created`.
+  </Card>
+</CardGroup>

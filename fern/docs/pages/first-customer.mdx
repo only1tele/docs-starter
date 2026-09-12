@@ -1,6 +1,105 @@
 ---
 title: Create your first customer
-subtitle: Create a customer and get their key.
+subtitle: The record that lets a wallet belong to somebody and an event name who it is about.
 ---
 
-<Note>This page is being written. See the platform guide for the source material.</Note>
+<Steps>
+
+<Step title="Create the customer">
+
+```bash title="Request"
+curl --request POST \
+  --url https://api.mitu.ai/v1/customers \
+  --header "x-api-key: $MITU_API_KEY" \
+  --header "Idempotency-Key: customer-your_user_8841" \
+  --header "Content-Type: application/json" \
+  --data '{
+    "client_reference_id": "your_user_8841",
+    "first_name": "Ada",
+    "last_name": "Obi",
+    "email": "ada@example.com",
+    "phone": "+2348099887766"
+  }'
+```
+
+```json title="201 Created"
+{
+  "id": "cus_ds9hazr8jd3l",
+  "client_reference_id": "your_user_8841",
+  "first_name": "Ada",
+  "last_name": "Obi",
+  "email": "ada@example.com",
+  "phone": "+2348099887766",
+  "key": "mcpk_3a6f9d2a6bbc816b11d524fe052b26b7e75fb7b5fa7a1a7d",
+  "mcp_url": "https://mcp.yourdomain.com/mcp",
+  "created_at": "2026-09-11T15:00:34.915Z"
+}
+```
+
+</Step>
+
+<Step title="Save what matters">
+
+<ParamField path="id" type="string">
+  `cus_…`. You need it to act on the customer later, such as issuing them a wallet.
+</ParamField>
+
+<ParamField path="client_reference_id" type="string">
+  Your own identifier. It comes back on every event as `customer_ref` and on every forwarded request as `x-mitu-customer-ref`, so you can resolve a request to your own row without storing Mitu's id.
+</ParamField>
+
+<ParamField path="key" type="string">
+  The customer's MCP key, **returned once**. Capture it here if the customer will connect with a key rather than by signing in. Only a hash is stored.
+</ParamField>
+
+<ParamField path="mcp_url" type="string">
+  Where their AI client connects.
+</ParamField>
+
+Store the pairing both ways: `your_user_8841 <-> cus_ds9hazr8jd3l`. Do not store the key; it is the customer's credential, not yours.
+
+</Step>
+
+<Step title="Understand idempotency">
+
+```text
+Same key, same body, within 24 hours   the original response, byte for byte
+Same key, different body               409
+```
+
+A `409` means something changed between your attempts, not that a retry failed. The key is remembered only after the work succeeded, so a failed creation does not replay as a success.
+
+`client_reference_id` is a second safety net: the same reference always resolves to the same customer, so even a retry without an idempotency key will not create a duplicate.
+
+</Step>
+
+<Step title="Read it back">
+
+```bash
+curl --request GET \
+  --url "https://api.mitu.ai/v1/customers?limit=20" \
+  --header "x-api-key: $MITU_API_KEY"
+```
+
+```text
+GET /v1/customers/{id}   one customer
+```
+
+</Step>
+
+</Steps>
+
+<Note title="Customers can also arrive by sign-in">
+If you run your own OAuth, Mitu creates the customer the first time somebody signs in, from their `sub`, and tells you through `customer.created`. You do not call this endpoint first in that flow. See [connect customer accounts](/guides/integration-guides/connect-customer-accounts).
+</Note>
+
+## Next
+
+<CardGroup cols={2}>
+  <Card title="Issue your first wallet" icon="regular wallet" href="/guides/quick-start/issue-your-first-wallet">
+    Give this customer a pot to spend from.
+  </Card>
+  <Card title="Connect customer accounts" icon="regular key" href="/guides/integration-guides/connect-customer-accounts">
+    Keys and OAuth, in full.
+  </Card>
+</CardGroup>

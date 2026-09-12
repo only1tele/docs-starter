@@ -1,6 +1,68 @@
 ---
 title: Platform overview
-subtitle: How the three products fit together.
+subtitle: What you can build with Mitu, and how it fits alongside the systems you already run.
 ---
 
-<Note>This page is being written. See the platform guide for the source material.</Note>
+Mitu gives businesses the infrastructure to serve both humans and AI agents. You can bring your existing products, services and APIs to AI agents, accept payments from agents, give your customers Agent Wallets, and create payment experiences for both humans and agents.
+
+Mitu works alongside the systems you already have rather than requiring you to rebuild your product around AI agents. Your APIs, customer accounts and business logic remain yours, while Mitu provides the infrastructure needed for agent access, payments, wallets and settlement.
+
+## What you can build
+
+Mitu is a set of capabilities rather than a single product you have to adopt whole. Each one below stands on its own, and you can start with the one that matches what you are building.
+
+### 1. Connect your product to AI agents
+
+Bring your existing products, services and APIs to AI agents through MCP without building separate integrations for every AI client. You choose which operations agents can use and describe what each operation does, and Mitu makes them available as tools that agents can discover and call.
+
+Customers can connect to your product from AI clients such as ChatGPT, Claude, Claude Code, Cursor, Windsurf and other MCP compatible clients. When an agent uses one of your tools, Mitu communicates with your existing API while your application continues to handle its normal product and business logic.
+
+<a className="mitu-link" href="/guides/integration-guides/connect-to-ai-agents">Connect your product to AI agents <span className="mitu-arrow">→</span></a>
+
+### 2. Accept payments from agents
+
+Let AI agents pay for API calls, purchases, bookings and other services while completing actions on behalf of their users. Mitu handles supported agent payment protocols such as x402 and MPP, so your business does not need to build and maintain separate integrations for each protocol.
+
+You continue to provide the product or service while Mitu handles the agent payment experience. Payments you receive are reflected in your Mitu balance and can be settled to your bank account or withdrawn as stablecoin to an onchain address.
+
+<a className="mitu-link" href="/guides/integration-guides/accept-payment-from-agents">Accept payments from agents <span className="mitu-arrow">→</span></a>
+
+### 3. Give your customers Agent Wallets
+
+Agent Wallets are wallets you issue to your customers so their AI agents can make payments on their behalf. You can configure spending controls for each wallet, such as limits for individual payments, monthly spending limits and thresholds that require customer approval.
+
+Customers can fund their wallets with supported stablecoins or with local bank transfers in NGN, USD, EUR, GBP, MXN, BRL and COP. Their AI agents can then use the available balance to make authorised payments, while Mitu enforces the spending controls you have configured for the wallet.
+
+<a className="mitu-link" href="/guides/integration-guides/issue-wallets-to-customers">Issue wallets to customers <span className="mitu-arrow">→</span></a>
+
+### 4. Create payment experiences
+
+Create payment experiences that work for both humans and AI agents without maintaining completely separate payment systems for each type of payer. Mitu supports one time payments, payment links, invoices and subscriptions that can be connected to your existing products and services.
+
+A human can complete a payment through a checkout experience, while an AI agent can complete the corresponding payment through an agent compatible flow. You can associate payments with your own customers, orders and internal references so activity can be reconciled with the systems you already use.
+
+<a className="mitu-link" href="/guides/integration-guides/create-payment-experiences">Create payment experiences <span className="mitu-arrow">→</span></a>
+
+### 5. Connect your existing customers
+
+Mitu works with the customer accounts you already have, so adopting agent experiences does not require creating a separate customer system. You can create Mitu customers through the API and associate each record with the corresponding customer in your own system.
+
+Existing customers can also connect through your OAuth sign in flow and continue using their existing accounts from supported AI clients. The resulting Mitu customer record provides a consistent identity that can be used across MCP access, Agent Wallets and payment activity.
+
+<a className="mitu-link" href="/guides/integration-guides/connect-customer-accounts">Connect customer accounts <span className="mitu-arrow">→</span></a>
+
+### 6. Settle your funds
+
+Payments received through Mitu are reflected in your Mitu balance, giving your business a consistent place to manage funds received across supported payment experiences. This applies whether the payment originated from a human checkout or an AI agent completing a paid action.
+
+You can settle your available funds to a supported bank account or withdraw stablecoins to an onchain address. This allows your business to choose how it receives its money without making the payer's payment method part of your operational workflow.
+
+<a className="mitu-link" href="/platform/payments/settlement">Learn about settlement <span className="mitu-arrow">→</span></a>
+
+## Start building
+
+Start by setting up your Mitu account and making your first authenticated API request. Once your integration is connected, you can choose the capabilities that match what you want to build rather than configuring the entire platform upfront.
+
+From there, you can connect your product to AI agents, create your first customer, issue an Agent Wallet or accept your first payment. The Quick start guides walk through each of these paths from setup to a working integration.
+
+<a className="mitu-link" href="/guides/quick-start/get-set-up-with-mitu">Get set up with Mitu <span className="mitu-arrow">→</span></a>

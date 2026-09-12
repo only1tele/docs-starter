@@ -1,5 +1,83 @@
 ---
-title: Customers API
+title: Customer API
+subtitle: A customer is one of your users. The record is what lets a wallet belong to somebody, and what lets an event name who it is about.
 ---
 
-<Note>This page is being written. See the platform guide for the source material.</Note>
+Mitu holds a customer record so that MCP access, Agent Wallets and events can all be tied to the person or account an agent is acting for.
+
+There are two ways one comes into existence:
+
+```text
+Merchant API    POST /v1/customers
+OAuth sign-in   created on first sign-in, from the identity provider's sub
+```
+
+Whichever path a customer arrives by, the model is the same afterwards: a customer exists, and a wallet is something you create for them. Signing in never creates a wallet.
+
+## Creating a customer
+
+```bash title="Create a customer"
+curl --request POST \
+  --url https://api.mitu.ai/v1/customers \
+  --header "x-api-key: $MITU_API_KEY" \
+  --header "Idempotency-Key: customer-your_user_8841" \
+  --header "Content-Type: application/json" \
+  --data '{
+    "client_reference_id": "your_user_8841",
+    "first_name": "Ada",
+    "last_name": "Obi",
+    "email": "ada@example.com",
+    "phone": "+2348099887766"
+  }'
+```
+
+```json title="Response"
+{
+  "id": "cus_ds9hazr8jd3l",
+  "client_reference_id": "your_user_8841",
+  "first_name": "Ada",
+  "last_name": "Obi",
+  "email": "ada@example.com",
+  "phone": "+2348099887766",
+  "key": "mcpk_3a6f9d2a6bbc816b11d524fe052b26b7e75fb7b5fa7a1a7d",
+  "mcp_url": "https://mcp.yourdomain.com/mcp",
+  "created_at": "2026-09-11T15:00:34.915Z"
+}
+```
+
+### client_reference_id
+
+Your own identifier for the person. It does three things:
+
+- It keeps the Mitu customer tied to the user record you already have.
+- It comes back on every later event as `customer_ref` and on forwarded requests as `x-mitu-customer-ref`, so you never have to store Mitu's id unless you want to.
+- It makes the call safe to retry, because the same reference always resolves to the same customer.
+
+### key
+
+The `key` field is a customer MCP key, returned once at creation. Only a hash is stored, so it cannot be shown again. [Customer keys](/platform/customers/customer-keys) covers what it is for and what it cannot do.
+
+## Idempotency
+
+Send an `Idempotency-Key` header. The same key within 24 hours returns the original response byte for byte. The same key with a different body returns 409, which means something on your side has changed between attempts rather than that a retry failed.
+
+## Reading customers back
+
+```http
+GET /v1/customers?limit=20
+GET /v1/customers/{id}
+```
+
+{/* SCREENSHOT: docs/assets/platform/customers/customers.png
+     Caption: "The Customers page." No real personal data. */}
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="Customer keys" icon="regular key" href="/platform/customers/customer-keys">
+    The `mcpk_...` credential, and the line between it and your merchant key.
+  </Card>
+  <Card title="Customers through OAuth" icon="regular right-to-bracket" href="/platform/customers/oauth">
+    Customers created from your own identity provider.
+  </Card>
+</CardGroup>

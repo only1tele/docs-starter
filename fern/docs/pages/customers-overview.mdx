@@ -1,0 +1,102 @@
+---
+title: Customers
+subtitle: A customer is one of your users. The record is what lets a wallet belong to somebody and an event name who it is about.
+---
+
+Mitu holds a thin record of the people you serve, so that MCP access, Agent Wallets and events can all be tied to the person an agent is acting for.
+
+```text
+Your system          the customer, in full
+        |
+        | client_reference_id
+        |
+Mitu                 a record: an id, a reference, a way to reach them
+        |
+        +-- MCP access, by key or by sign-in
+        +-- Agent Wallets you issue them
+        +-- events that name who they are about
+```
+
+## Your customer record stays yours
+
+Mitu is not a CRM and does not want to be one. It holds enough to identify somebody and no more. Your own database remains the source of truth for who they are, what they have bought, what they are entitled to and everything else you already know.
+
+The join between the two is `client_reference_id`: your identifier, stored on the Mitu record, returned on every event as `customer_ref` and on every forwarded request as `x-mitu-customer-ref`. Set it and you never have to store Mitu's id unless you want to.
+
+## How customers are created
+
+```text
+Merchant API    POST /v1/customers            you provision them
+OAuth sign-in   created on first sign-in      from your provider's sub
+```
+
+Whichever path they arrive by, the model afterwards is identical: a customer exists, and anything else is something you create for them.
+
+<Note title="Creating a customer creates nothing else">
+No wallet, no balance, no address. A wallet is a separate, explicit action. So is issuing a key beyond the one returned at creation.
+</Note>
+
+## What a customer can have
+
+```text
+A customer key     mcpk_…, returned once at creation
+Agent Wallets      as many as you issue them, each a separate pot
+Movement           payments made, wallets credited and debited
+```
+
+None of these appear automatically.
+
+## Customer identity in a request
+
+When an agent calls one of your endpoints on behalf of a known customer, your backend receives:
+
+```http
+x-mitu-customer-id: cus_ds9hazr8jd3l
+x-mitu-customer-ref: your_user_8841
+```
+
+Verify the request signature before trusting either. They are plain headers, and they are set after the forwarded ones precisely so a caller cannot supply its own.
+
+An agent paying from its own funds belongs to nobody you have a record of, so both are absent. That is ordinary, not a fault.
+
+## Events
+
+`customer.created` fires when one comes into existence, either way.
+
+```json
+{
+  "event": "customer.created",
+  "event_data": {
+    "customer_id": "cus_0t9549fps3xd",
+    "customer_ref": "auth0|68f3c2a1b9",
+    "name": "Tele",
+    "email": "tele@mitu.ai",
+    "status": "unverified",
+    "source": "oauth",
+    "service_id": "svc_dhydwg80dzb4vy6xjl2m"
+  }
+}
+```
+
+`source` distinguishes the two paths. On an OAuth customer, `customer_ref` is the identity provider's `sub`.
+
+<Note title="customer.status.changed is not emitted">
+The event type exists but nothing raises it today. Do not build a verification flow that waits on it.
+</Note>
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="Customer API" icon="regular code" href="/platform/customers/customer-api">
+    Creating and reading customers.
+  </Card>
+  <Card title="Customer keys" icon="regular key" href="/platform/customers/customer-keys">
+    What an `mcpk_…` key is for.
+  </Card>
+  <Card title="OAuth" icon="regular right-to-bracket" href="/platform/customers/oauth">
+    Customers who arrive by signing in.
+  </Card>
+  <Card title="Agent Wallets" icon="regular wallet" href="/platform/agent-wallets/overview">
+    What you can issue a customer.
+  </Card>
+</CardGroup>

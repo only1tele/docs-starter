@@ -1,5 +1,102 @@
 ---
 title: Endpoints
+subtitle: An endpoint is a path on your API plus everything an agent needs in order to decide whether to call it.
 ---
 
-<Note>This page is being written. See the platform guide for the source material.</Note>
+Registering an endpoint is what turns an operation you already serve into a tool an agent can discover. The record holds the routing details, the schemas, and the text the model actually reads.
+
+## Fields
+
+<ParamField path="path" type="string" required={true}>
+  The path on your API, such as `/orders`. Relative to the base URL set on your [integration](/platform/mcp/domains).
+</ParamField>
+
+<ParamField path="method" type="GET | POST | PUT | PATCH | DELETE" required={true}>
+  The HTTP method Mitu uses when it forwards the call.
+</ParamField>
+
+<ParamField path="name" type="string" required={true}>
+  The tool name the agent sees, such as `create_order`. Keep it in the verb_noun form that models are used to.
+</ParamField>
+
+<ParamField path="description" type="string" required={true}>
+  What the operation does. Describe the behaviour, not the route.
+
+  Poor: `Creates order`
+
+  Better: `Creates an order for the signed-in customer from the confirmed cart and delivery details`
+</ParamField>
+
+<ParamField path="when_to_use" type="string">
+  When an agent should reach for this tool rather than another. This is the field that decides whether a model picks correctly or guesses, and it is worth more care than any other.
+
+  Example: `Use after the customer has confirmed the items, quantities, delivery address and final price`
+</ParamField>
+
+<ParamField path="pricing_type" type="free | fixed | dynamic | tiered | session" required={true}>
+  How the call is charged. [Endpoint types](/platform/payments/pricing) covers what each one does.
+</ParamField>
+
+<ParamField path="price" type="number">
+  The amount charged per call. Applies to `fixed` pricing.
+</ParamField>
+
+<ParamField path="input_schema" type="JSON Schema">
+  Becomes the tool's arguments. The more precise it is, the fewer malformed calls reach your API.
+</ParamField>
+
+<ParamField path="output_schema" type="JSON Schema">
+  What the agent should expect back, so it can use the result rather than guess at it.
+</ParamField>
+
+<ParamField path="requires_auth" type="boolean">
+  Whether the caller must be a signed-in customer. See [MCP authentication](/platform/mcp/authentication).
+</ParamField>
+
+<ParamField path="rate_limit_per_minute" type="number" default="60">
+  Calls per minute allowed against this endpoint.
+</ParamField>
+
+<ParamField path="is_public" type="boolean">
+  Whether the endpoint appears in the tool list. A hidden endpoint still works when called; it is merely not advertised.
+</ParamField>
+
+## Importing an OpenAPI document
+
+If you already maintain an OpenAPI document, import it instead of adding operations by hand. Mitu parses it and creates one endpoint per operation, with the schemas attached, which you can then edit.
+
+{/* SCREENSHOT: docs/assets/platform/mcp/endpoints.png
+     Caption: "The Endpoints page with several endpoints and their prices."
+     Use a populated list showing name, method, path and pricing. */}
+
+## Designing a set of tools
+
+An agent chooses from the whole list, so the list is part of the design. Most integrations fall into three groups:
+
+```text
+get_menu              discovery     what is available, and on what terms
+check_delivery_zone   discovery
+create_order          transaction   the thing that commits and costs money
+get_order             status        what happened to an earlier transaction
+```
+
+Or, for a booking business:
+
+```text
+search_availability   discovery
+create_booking        transaction
+get_booking           status
+```
+
+Keeping the three apart does two things. It lets an agent gather what it needs before anything commits, which is how it avoids buying the wrong thing. And it gives it a way to answer "where is my order" without placing another one, which is a real failure mode when the only transaction-shaped tool available is the one that creates orders.
+
+Register the operations that are meaningful to an agent, not every operation you serve. A tool list containing things an agent should never call makes it more likely that it calls one.
+
+Keep volatile commercial information out of tool descriptions. Prices, stock and availability are read once at connection time and then go stale; they belong in the response from a discovery call, where your API stays authoritative.
+
+## Writing descriptions that work
+
+A model sees `name`, `description`, `when_to_use` and the schemas, and nothing else. Two failures account for most poor tool choices:
+
+- **Restating the route.** "Creates order" tells the model nothing it could not infer from the name. Say what the operation does to what, and for whom.
+- **Leaving `when_to_use` empty.** With several plausible tools and no guidance, a model picks on wording alone. Say what must already be true before the call makes sense.

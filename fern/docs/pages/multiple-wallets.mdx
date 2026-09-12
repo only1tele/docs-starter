@@ -1,0 +1,80 @@
+---
+title: Multiple wallets
+subtitle: Why a customer holds separate pots, and why an agent is refused rather than allowed to guess between them.
+---
+
+One customer can hold as many wallets as you issue them. Each is a separate pot with its own balance, its own limits and its own funding addresses.
+
+```text
+Travel      $300, per-payment 500, monthly 3000
+Office      $80,  per-payment 150, monthly 1000
+Groceries   $40,  per-payment 50,  monthly 400
+```
+
+Funding Travel never touches Office, and spending from Travel never draws on Groceries. The separation is the product: it is what lets a customer give an agent real spending power for one purpose without exposing everything they hold.
+
+## Names are the interface
+
+The name is not a label for your dashboard. It is what the customer says and what the agent passes.
+
+```text
+"Book the flight from Travel."
+```
+
+So names should read the way somebody would say them, and should be distinguishable when spoken.
+
+| Good | Poor |
+| --- | --- |
+| `Travel` | `Wallet 1` |
+| `Office` | `Wallet 2` |
+| `Research` | `Other` |
+| `Groceries` | `Main 2` |
+
+Names are unique per customer. Two wallets called Travel would leave the agent guessing between them, so the second create returns the first.
+
+## The selection rules
+
+```text
+One wallet         the agent need not name it
+Several wallets    it must name one where money moves
+No name given      refused, with the names listed back
+Unknown name       refused, with no fallback
+```
+
+Reading is the deliberate exception. `get_balance` with no name and several wallets answers for all of them rather than refusing, because a balance is a question with a complete answer and reading harms nothing. It is paying from the wrong pot that does damage.
+
+## Why refusing is the right behaviour
+
+A fallback looks helpful and is not.
+
+```text
+"Pay for the hotel from Travel."
+
+Travel has $40. The hotel is $120.
+```
+
+An agent that quietly moved to Office would have done something the customer did not ask for and would not find out about until they looked. The money was separated on purpose, and the separation is only real if it holds at the moment it costs something.
+
+So Mitu refuses, says which wallets exist, and leaves the decision with the person whose money it is. If the customer wants it paid from Office, they can say so.
+
+The same applies to an unrecognised name. A typo, or a model inventing a plausible wallet, resolves to nothing rather than to whatever is nearest.
+
+<Note title="This is also a defence against prompt injection">
+An agent reading untrusted content can be told to pay from a different wallet. Refusing an unnamed or unknown wallet means the only way to reach a pot is for the customer to have named it, which keeps the choice with the person rather than with whatever the model last read.
+</Note>
+
+## Designing the set
+
+Give a customer a wallet per purpose, not per transaction. A pot that exists for one booking is a pot nobody remembers the name of.
+
+Three or four with clear purposes work well. Beyond that the customer is being asked to remember an inventory, and the agent is being asked to distinguish between names that have started to overlap.
+
+If a customer needs one pot, give them one. A single wallet needs no name at the point of payment, which is the simplest thing that can happen.
+
+{/* SCREENSHOT: docs/assets/platform/agent-wallets/multiple-wallets.png
+     Caption: "One customer with several named wallets, each with its own
+     balance and limits." No real customer data. */}
+
+## Related
+
+[Wallet tools](/platform/agent-wallets/wallet-tools) covers the exact arguments and what each tool refuses. [Agent Wallets](/platform/agent-wallets/overview) covers creating them, and [limits and controls](/platform/agent-wallets/limits-and-controls) what applies per wallet rather than per customer.

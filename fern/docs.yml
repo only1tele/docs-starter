@@ -17,9 +17,6 @@ tabs:
   home:
     display-name: Home
     icon: house
-  get-started:
-    display-name: Get started
-    icon: rocket
   guides:
     display-name: Guides
     icon: book-open
@@ -37,12 +34,10 @@ navigation:
         path: docs/pages/home.mdx
         slug: welcome
 
-  - tab: get-started
+  - tab: guides
     layout:
       - page: Platform overview
         path: docs/pages/overview.mdx
-      - page: What we support
-        path: docs/pages/support.mdx
       - section: Quick start
         contents:
           - page: Get set up with Mitu
@@ -55,49 +50,51 @@ navigation:
             path: docs/pages/first-payment.mdx
           - page: Configure webhooks
             path: docs/pages/setup-webhooks.mdx
-  - tab: guides
-    layout:
       - section: Use cases
         contents:
-          - page: Your app as an agent channel
+          - page: Agent channels
             path: docs/pages/uc-app.mdx
-          - page: Sell your API to agents
+          - page: API monetisation
             path: docs/pages/uc-sell-api.mdx
-          - page: Let agents buy from you
+          - page: Agent commerce
             path: docs/pages/uc-buy.mdx
-          - page: Agents that can spend
+          - page: Agent wallets
             path: docs/pages/uc-spend.mdx
-          - page: Get paid by person or agent
+          - page: Universal payments
             path: docs/pages/uc-links.mdx
-          - page: Build on other APIs
+          - page: Agent purchasing
             path: docs/pages/uc-build.mdx
       - section: Integration guides
         contents:
+          - page: Connect to AI agents
+            path: docs/pages/guide-connect.mdx
           - page: Accept payment from agents
             path: docs/pages/guide-byo.mdx
           - page: Issue wallets to customers
             path: docs/pages/guide-wallets.mdx
-          - page: Authenticate with your identity provider
-            path: docs/pages/guide-oauth.mdx
-          - page: Payment links
-            path: docs/pages/guide-links.mdx
+          - page: Connect customer accounts
+            path: docs/pages/guide-accounts.mdx
+          - page: Create payment experiences
+            path: docs/pages/guide-payments.mdx
   - tab: platform
     layout:
       - section: Payments
         contents:
           - page: Overview
             path: docs/pages/payments.mdx
-          - page: 402 payment flow
-            path: docs/pages/flow402.mdx
-          - page: Payment methods
-            path: docs/pages/methods.mdx
-          - page: Dynamic pricing
-            path: docs/pages/dynamic.mdx
-          - page: Paid but not delivered
-            path: docs/pages/undelivered.mdx
-          - page: Payouts
+          - page: Agent payments
+            path: docs/pages/agent-payments.mdx
+          - page: Pricing
+            path: docs/pages/pricing.mdx
+          - page: Payment experiences
+            path: docs/pages/payment-links.mdx
+          - page: Invoices
+            path: docs/pages/invoices.mdx
+          - page: Subscriptions
+            path: docs/pages/subscriptions.mdx
+          - page: Settlement
             path: docs/pages/settlement.mdx
-      - section: Wallets
+      - section: Agent Wallets
         contents:
           - page: Overview
             path: docs/pages/wallets.mdx
@@ -107,31 +104,49 @@ navigation:
             path: docs/pages/funding.mdx
           - page: Wallet tools
             path: docs/pages/wallet-tools.mdx
+          - page: Multiple wallets
+            path: docs/pages/multiple-wallets.mdx
       - section: Customers
         contents:
-          - page: Customers API
+          - page: Overview
+            path: docs/pages/customers-overview.mdx
+          - page: Customer API
             path: docs/pages/customers.mdx
-          - page: Customers through OAuth
+          - page: Customer keys
+            path: docs/pages/customer-keys.mdx
+          - page: OAuth
             path: docs/pages/oauth-customers.mdx
-      - section: The MCP
+            slug: oauth
+      - section: MCP
         contents:
           - page: Overview
             path: docs/pages/mcp.mdx
           - page: Endpoints
             path: docs/pages/endpoints.mdx
-          - page: Endpoint types
-            path: docs/pages/pricing-types.mdx
-          - page: Domain and integration
+          - page: Tool schemas
+            path: docs/pages/tool-schemas.mdx
+          - page: Authentication
+            path: docs/pages/mcp-auth.mdx
+          # Auto-derives to open-api-import: Fern splits the slug at the case
+          # boundary in OpenAPI, as it does for OAuth.
+          - page: OpenAPI import
+            path: docs/pages/openapi-import.mdx
+          - page: Domains
             path: docs/pages/domain.mdx
-      - section: Additional information
+          - page: Buying through the Mitu MCP
+            path: docs/pages/mitu-mcp.mdx
+            slug: mitu-mcp
+      - section: Webhooks
         contents:
-          - page: Request signature verification
-            path: docs/pages/verify.mdx
-          - page: Webhooks
+          - page: Overview
             path: docs/pages/webhooks.mdx
           - page: Events
             path: docs/pages/events.mdx
-          - page: Keys, secrets and logs
+      - section: Security
+        contents:
+          - page: Request verification
+            path: docs/pages/verify.mdx
+          - page: Keys and secrets
             path: docs/pages/dashboard.mdx
   - tab: api-reference
     layout:
@@ -144,6 +159,64 @@ navigation:
       - page: Common integration errors
         path: docs/pages/mistakes.mdx
       - api: API Reference
+
+redirects:
+  - source: "/platform/customers/customers-through-o-auth"
+    destination: "/platform/customers/oauth"
+  - source: "/guides/integration-guides/authenticate-with-your-identity-provider"
+    destination: "/guides/integration-guides/connect-customer-accounts"
+  - source: "/guides/integration-guides/payment-links"
+    destination: "/guides/integration-guides/create-payment-experiences"
+  - source: "/support"
+    destination: "/guides/platform-overview"
+  - source: "/guides/what-we-support"
+    destination: "/guides/platform-overview"
+
+  - source: "/platform/payments/402-payment-flow"
+    destination: "/platform/payments/agent-payments"
+  - source: "/platform/payments/payment-methods"
+    destination: "/platform/payments/agent-payments"
+  - source: "/platform/payments/paid-but-not-delivered"
+    destination: "/platform/payments/agent-payments"
+  - source: "/platform/payments/dynamic-pricing"
+    destination: "/platform/payments/pricing"
+  - source: "/platform/the-mcp/endpoint-types"
+    destination: "/platform/payments/pricing"
+  - source: "/platform/payments/payment-links"
+    destination: "/platform/payments/payment-experiences"
+  - source: "/platform/payments/payouts"
+    destination: "/platform/payments/settlement"
+  - source: "/platform/wallets/overview"
+    destination: "/platform/agent-wallets/overview"
+  - source: "/platform/wallets/limits-and-controls"
+    destination: "/platform/agent-wallets/limits-and-controls"
+  - source: "/platform/wallets/funding"
+    destination: "/platform/agent-wallets/funding"
+  - source: "/platform/wallets/wallet-tools"
+    destination: "/platform/agent-wallets/wallet-tools"
+  - source: "/platform/wallets/multiple-wallets"
+    destination: "/platform/agent-wallets/multiple-wallets"
+
+  - source: "/platform/customers/customers-api"
+    destination: "/platform/customers/customer-api"
+  - source: "/platform/the-mcp/overview"
+    destination: "/platform/mcp/overview"
+  - source: "/platform/the-mcp/endpoints"
+    destination: "/platform/mcp/endpoints"
+  - source: "/platform/the-mcp/authentication"
+    destination: "/platform/mcp/authentication"
+  - source: "/platform/the-mcp/domain-and-integration"
+    destination: "/platform/mcp/domains"
+  - source: "/platform/the-mcp/mitu-mcp"
+    destination: "/platform/mcp/mitu-mcp"
+  - source: "/platform/additional-information/webhooks"
+    destination: "/platform/webhooks/overview"
+  - source: "/platform/additional-information/events"
+    destination: "/platform/webhooks/events"
+  - source: "/platform/additional-information/request-signature-verification"
+    destination: "/platform/security/request-verification"
+  - source: "/platform/additional-information/keys-secrets-and-logs"
+    destination: "/platform/security/keys-and-secrets"
 
 navbar-links:
   - type: minimal

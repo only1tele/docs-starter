@@ -1,5 +1,254 @@
 ---
 title: Events
+subtitle: Everything Mitu can tell your backend, and the payloads it sends.
 ---
 
-<Note>This page is being written. See the platform guide for the source material.</Note>
+Every event shares one envelope:
+
+```json
+{
+  "event": "wallet.debited",
+  "event_id": "evt_h9x2ez72ichll2ti80cc",
+  "event_created_at": "2026-09-11T18:01:41.255Z",
+  "event_data": { }
+}
+```
+
+Only the fields that apply to an event are sent. On payment events, `source` says which shape to expect: a payment from a link carries no `service_id`, and one from an MCP endpoint carries no `payment_link_id`.
+
+Anything naming a customer carries both ids. `customer_id` is Mitu's, and `customer_ref` is yours, from the `client_reference_id` you set.
+
+## Two groups
+
+`payment.*` events mean **you are being paid**. An agent paid for a call, a link or an invoice, and the money is now yours.
+
+`wallet.*` events belong to **wallets you issue**. The money is your customer's and you are the operator, not the payee.
+
+A merchant may run either or both. An agent paying an endpoint from its own funds raises `payment.completed` and no wallet event. One of your wallet customers paying somebody else raises `wallet.debited` and no payment event. Only when your own wallet customer pays you do both fire, describing the two sides of one movement.
+
+## payment.completed
+
+Fires when you are paid.
+
+```json title="source: mcp"
+{
+  "event": "payment.completed",
+  "event_id": "evt_er5sbax1m3vitp5d6thi",
+  "event_created_at": "2026-09-09T19:03:28.154Z",
+  "event_data": {
+    "source": "mcp",
+    "service_id": "svc_dhydwg80dzb4vy6xjl2m",
+    "endpoint_id": "ep_j7z4sqeiyqu7p4ljlg4s",
+    "request_path": "/orders",
+    "customer_id": "cus_0t9549fps3xd",
+    "customer_ref": "auth0|68f3c2a1b9",
+    "amount_paid": "0.035000",
+    "currency": "USDC",
+    "payment_method": "x402",
+    "network": "base",
+    "transaction_id": "f5533e85-16d8-4f58-ba22-86dba59c6a15",
+    "tx_hash": "0xfe093b9a57695615cc453f86b2890eb70e0a2860ce040f54af7aca03ce2a89ab",
+    "reference": "ORDER-8841",
+    "delivered": true
+  }
+}
+```
+
+`delivered` says whether your endpoint served the paid call. `false` arrives with `failure_status`, the status your endpoint answered with:
+
+```json
+{
+  "delivered": false,
+  "failure_status": 401
+}
+```
+
+You are paid before your endpoint is called, so `delivered: false` means you are holding money for work that was not done. See [paid but not delivered](/platform/payments/agent-payments).
+
+The customer fields are present only when the payer is a known Mitu customer. An agent paying from its own funds has no customer record, and their absence is normal.
+
+## payment.failed
+
+Fires when a payment was attempted and did not complete.
+
+```json
+{
+  "event": "payment.failed",
+  "event_id": "evt_c9q4zx1lkm3npv8h",
+  "event_created_at": "2026-09-09T18:50:29.612Z",
+  "event_data": {
+    "source": "mcp",
+    "service_id": "svc_dhydwg80dzb4vy6xjl2m",
+    "endpoint_id": "ep_j7z4sqeiyqu7p4ljlg4s",
+    "request_path": "/orders",
+    "customer_id": "cus_0t9549fps3xd",
+    "customer_ref": "auth0|68f3c2a1b9",
+    "amount": "0.035000",
+    "currency": "USDC",
+    "payment_method": "x402",
+    "network": "base",
+    "transaction_id": "b01506f6-5f13-4197-b916-4066ef95c1d8",
+    "reason": "settlement_failed",
+    "detail": "insufficient balance to perform useroperation: precheck failed"
+  }
+}
+```
+
+`reason` is one of `no_supported_method`, `insufficient_balance`, `over_limit`, `settlement_failed` or `upstream_rejected`.
+
+## wallet.created
+
+Raised once per wallet, when you create one.
+
+```json
+{
+  "event": "wallet.created",
+  "event_id": "evt_gezy2oi5cegdablsyi3p",
+  "event_created_at": "2026-09-11T00:32:58.292Z",
+  "event_data": {
+    "customer_id": "cus_xsfod4ihhn9t",
+    "customer_ref": "goro_user_9100",
+    "wallet_id": "wal_65286515b43d4e3eba93",
+    "name": "Travel",
+    "currency": "USDC",
+    "limits": {
+      "per_payment": 25,
+      "monthly": 200,
+      "approve_above": 50,
+      "currency": "USD"
+    },
+    "addresses": [
+      { "network": "base", "address": "0xa90818aeC6..." },
+      { "network": "tempo", "address": "0xa90818aeC6..." },
+      { "network": "solana", "address": "7U6P9CrM7C..." }
+    ]
+  }
+}
+```
+
+Limits are USD while the balance is USDC, so the object says which. Creating a wallet with a name that already exists returns the existing one and announces nothing, so this event is not a reliable signal that a create call was made, only that a wallet came into existence.
+
+## wallet.credited
+
+A deposit landed.
+
+```json
+{
+  "event": "wallet.credited",
+  "event_id": "evt_u0b5zq2xlk8mpn1k",
+  "event_created_at": "2026-09-09T18:41:50.204Z",
+  "event_data": {
+    "customer_id": "cus_0t9549fps3xd",
+    "customer_ref": "auth0|68f3c2a1b9",
+    "wallet_id": "wal_65286515b43d4e3eba93",
+    "amount": "0.067000",
+    "currency": "USDC",
+    "network": "base",
+    "address": "0xCD2CEd9732...",
+    "tx_hash": "0x7c1e4a902f6b...",
+    "balance_after": "0.067000"
+  }
+}
+```
+
+`balance_after` is that wallet alone, not everything the customer holds.
+
+## wallet.debited
+
+Money left a wallet you issued.
+
+```json
+{
+  "event": "wallet.debited",
+  "event_id": "evt_j3g8zq6xlk1mpv2l",
+  "event_created_at": "2026-09-09T19:03:28.480Z",
+  "event_data": {
+    "customer_id": "cus_0t9549fps3xd",
+    "customer_ref": "auth0|68f3c2a1b9",
+    "amount": "0.035000",
+    "currency": "USDC",
+    "network": "base",
+    "reason": "payment",
+    "destination": {
+      "type": "merchant",
+      "name": "AgentPizza",
+      "address": "0x1DDb114B971E67241B3aF19C958a01EBBfb1B6DD"
+    },
+    "transaction_id": "f5533e85-16d8-4f58-ba22-86dba59c6a15",
+    "tx_hash": "0xfe093b9a57695615cc453f86b2890eb70e0a2860ce040f54af7aca03ce2a89ab",
+    "delivered": true
+  }
+}
+```
+
+`reason` is `payment`, `withdrawal` or `reversal`. `destination.type` is `merchant`, in which case `name` is set, or `external`, in which case it is not.
+
+### Joining the two sides
+
+`payment.completed` and `wallet.debited` describe one movement from two sides. Join them on **`tx_hash`**, which is the on-chain settlement and identical on both.
+
+Do not join on `transaction_id`. Each event names the record in the system that raised it, the request on one side and the wallet movement on the other, and they are different rows with different values.
+
+## Payment link, invoice and subscription events
+
+`link.created` carries the link, your `reference`, and both entry points:
+
+```json
+{
+  "event": "link.created",
+  "event_id": "evt_3lp8zq1xkm6vcd2b",
+  "event_created_at": "2026-09-09T14:05:11.402Z",
+  "event_data": {
+    "payment_link_id": "pay_n8d7piu1yc6h",
+    "type": "charge",
+    "amount": "25.00",
+    "currency": "USD",
+    "reference": "ORDER-8841",
+    "description": "Two large pizzas",
+    "url": {
+      "checkout": "https://mitu.ai/pay/pay_n8d7piu1yc6h",
+      "agent": "https://api.mitu.ai/pay/pay_n8d7piu1yc6h"
+    }
+  }
+}
+```
+
+`link.viewed` fires when somebody opens the checkout page, carrying the link, your `reference` and `viewed_at`.
+
+`session.opened` carries the `session_id`, `max_deposit`, the `deposit` actually locked, the on-chain `channel_id` and the `tx_hash`. `session.closed` carries `spent_amount`, `refunded_amount` and its own `tx_hash`.
+
+Invoices emit `invoice.created`, `invoice.sent` and `invoice.paid`. Subscriptions emit `plan.created`, `subscription.created`, `subscription.charged`, `subscription.past_due` and `subscription.cancelled`.
+
+<Note title="Declared but not yet emitted">
+`invoice.viewed`, `invoice.overdue`, `refund.completed`, `settlement.completed` and `customer.status.changed` exist as event types, but nothing in the current implementation raises them. Do not build a flow that waits on one. Derive an overdue invoice from `dueAt` and its paid state, and reconcile payouts against `payment.completed`.
+</Note>
+
+## The rest
+
+```text
+CUSTOMER
+  customer.created            a customer now exists, by API or by sign-in
+
+WALLET
+  wallet.created              a wallet, its name, limits and addresses
+  wallet.credited             a deposit landed
+  wallet.debited              money left
+
+PAYMENT
+  payment.completed
+  payment.failed
+
+LINKS AND PLANS
+  link.created
+  link.viewed
+  plan.created
+  subscription.created
+  subscription.charged
+  subscription.past_due
+  subscription.cancelled
+  session.opened
+  session.closed
+  invoice.created / sent / viewed / paid / overdue
+```
+
+[Webhooks](/platform/webhooks/overview) covers how these are delivered, signed and retried.

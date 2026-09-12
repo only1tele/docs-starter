@@ -1,5 +1,54 @@
 ---
 title: Funding
+subtitle: How money reaches an Agent Wallet, and when it becomes spendable.
 ---
 
-<Note>This page is being written. See the platform guide for the source material.</Note>
+A wallet is funded by the customer. Nothing is moved from your balance into theirs.
+
+## On-chain USDC
+
+Send USDC to the wallet's address on a network it supports. Deposits are detected on-chain and credited automatically, and `wallet.credited` fires when they land.
+
+The addresses come back on the create-wallet response, and again when you read the wallet:
+
+```json title="Addresses on a wallet"
+"addresses": [
+  { "network": "base",   "address": "0xd7Ca1fdA..." },
+  { "network": "tempo",  "address": "0xd7Ca1fdA..." },
+  { "network": "solana", "address": "3c6SpTNK..." }
+]
+```
+
+<Warning title="Show the address that matches the network">
+An EVM address cannot receive on Solana, and funds sent to the wrong chain are not recoverable. The response says which address serves which network, so present the pair rather than a single address.
+</Warning>
+
+Each wallet has its own addresses, so funding one never touches another. An agent can read the right address for the customer with the `get_address` tool, described on [wallet tools](/platform/agent-wallets/wallet-tools).
+
+## Local bank transfer
+
+Wallets can also be funded by local bank transfer in NGN, USD, EUR, GBP, MXN, BRL and COP.
+
+{/* TODO before publishing: this section needs the real mechanism.
+     PLATFORM.txt documents on-chain USDC funding only, and the public API
+     specification carries no bank-transfer endpoint or request body, so
+     nothing beyond the list of currencies is stated here. Fill in how a
+     customer initiates a transfer, what they are shown, and how the credit
+     is confirmed, from the implementation rather than from assumption. */}
+
+## When funds are spendable
+
+A deposit is spendable once it has been credited. Until then the wallet's balance is unchanged, and a payment attempted against the expected amount is refused for insufficient funds rather than held.
+
+`wallet.credited` is the signal to act on if you want to tell the customer their wallet is ready. [Events](/platform/webhooks/events) lists the payload.
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="Agent Wallets" icon="regular wallet" href="/platform/agent-wallets/overview">
+    What a wallet is and how to create one.
+  </Card>
+  <Card title="Limits and controls" icon="regular sliders" href="/platform/agent-wallets/limits-and-controls">
+    What may leave a funded wallet.
+  </Card>
+</CardGroup>

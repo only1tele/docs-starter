@@ -1,6 +1,111 @@
 ---
 title: Accept your first payment
-subtitle: Take your first payment from an agent.
+subtitle: Create one charge, and let a person or an agent settle it.
 ---
 
-<Note>This page is being written. See the platform guide for the source material.</Note>
+<Steps>
+
+<Step title="Create the payment">
+
+```bash title="Request"
+curl --request POST \
+  --url https://api.mitu.ai/v1/payment-links \
+  --header "x-api-key: $MITU_API_KEY" \
+  --header "Content-Type: application/json" \
+  --data '{
+    "type": "charge",
+    "amount": 25.00,
+    "currency": "USD",
+    "description": "Invoice 8841",
+    "reference": "ORDER-8841",
+    "paymentMethods": ["x402", "mpp_spt"]
+  }'
+```
+
+Set `reference` to something your own system already knows. It comes back on the payment event, which is what lets you reconcile without storing Mitu's id. It costs nothing now and is awkward to retrofit.
+
+`paymentMethods` constrains what an agent may settle with. Offering more than one costs nothing and widens who can pay you.
+
+</Step>
+
+<Step title="Take both entry points">
+
+The response carries `checkoutUrl`. Both URLs arrive together on `link.created`:
+
+```json
+{
+  "payment_link_id": "pay_n8d7piu1yc6h",
+  "amount": "25.00",
+  "currency": "USD",
+  "reference": "ORDER-8841",
+  "url": {
+    "checkout": "https://mitu.ai/pay/pay_n8d7piu1yc6h",
+    "agent": "https://api.mitu.ai/pay/pay_n8d7piu1yc6h"
+  }
+}
+```
+
+</Step>
+
+<Step title="Choose how the payer pays">
+
+```text
+A person   opens the checkout URL and pays with what is available to them
+An agent   calls the agent URL, gets a 402, and settles it programmatically
+```
+
+You do not have to decide in advance which it will be. Send the checkout URL by email or SMS, hand the agent URL to an assistant, or both.
+
+<Warning title="The two URLs are not interchangeable">
+The checkout is a page. The agent URL answers a payment requirement. Give an agent the checkout URL and it gets HTML where it expected a challenge.
+</Warning>
+
+Nothing about the agent protocols is your problem. Mitu handles settlement underneath.
+
+</Step>
+
+<Step title="Reconcile">
+
+```text
+payment.completed  ->  reference: ORDER-8841  ->  your row  ->  mark it paid
+```
+
+Your handler does not branch on who paid.
+
+Do not mark anything paid from the payer's browser, or from what an AI client reported. Use the verified webhook, or read the state back from the API. On the agent path there is no browser to return from at all.
+
+</Step>
+
+<Step title="Know when it is paid">
+
+```text
+link.created        you made it
+link.viewed         somebody opened the checkout page
+payment.completed   it was paid
+payment.failed      an attempt did not complete, with a reason
+```
+
+`link.viewed` comes from the checkout page being opened, so do not read it as a general signal of interest covering the agent path.
+
+[Configure webhooks](/guides/quick-start/configure-webhooks) is the next page, and is how you receive these in production.
+
+</Step>
+
+<Step title="Where the money goes">
+
+Into your Mitu balance as USDC, whoever paid and however. From there you settle in local currency to your bank account or withdraw the stablecoin on chain. How somebody paid has no bearing on how you take it out.
+
+</Step>
+
+</Steps>
+
+## Next
+
+<CardGroup cols={2}>
+  <Card title="Configure webhooks" icon="regular bell" href="/guides/quick-start/configure-webhooks">
+    Receive payment state reliably.
+  </Card>
+  <Card title="Create payment experiences" icon="regular link" href="/guides/integration-guides/create-payment-experiences">
+    Invoices, subscriptions and sessions.
+  </Card>
+</CardGroup>

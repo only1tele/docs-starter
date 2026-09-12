@@ -1,5 +1,80 @@
 ---
-title: Overview
+title: The MCP
+subtitle: Your existing API, exposed to AI agents as tools they can discover, understand and pay for.
 ---
 
-<Note>This page is being written. See the platform guide for the source material.</Note>
+Your application already has clients: web, iOS, Android, or another service. An agent is another one. The difference is that it reads a tool description instead of a screen.
+
+So the work is not building an agent experience. It is describing the API you already have well enough that a model can choose correctly: what each operation does, when to reach for it, what it takes, and what it costs.
+
+Mitu handles the layer in front of your API:
+
+- MCP discovery and the tool list
+- tool descriptions, schemas and pricing metadata
+- customer authentication, by key or through your own OAuth
+- payment challenges and settlement on paid operations
+- signed forwarding to your backend
+
+Your endpoints do not change, and they remain the source of truth for your business logic.
+
+## What an agent sees
+
+Register your endpoints once. Each becomes a named tool with its price attached. An agent that connects sees something like:
+
+```text
+get_menu              GET   /menu     free
+create_order          POST  /orders   dynamic
+check_delivery_zone   GET   /zones    free
+call_endpoint         any path on your service
+```
+
+{/* SCREENSHOT: docs/assets/platform/mcp/tool-list.png
+     Caption: "An agent's tool list for a merchant MCP, showing named endpoint
+     tools beside the wallet tools." */}
+
+`call_endpoint` sits alongside the named tools and takes any path on your service. The named tools are what an agent should reach for, because they carry your description and your price, but they only cover paths you registered. A link pasted into a chat, or a sub-path beneath a registered one, has no tool of its own and would otherwise be uncallable. It is a fallback, not a substitute for defining tools properly.
+
+## Connecting
+
+```text
+URL         https://mcp.yourdomain.com/mcp, or https://mcp.mitu.ai/mcp
+Transport   Streamable HTTP
+```
+
+Customers authenticate either with a customer key you issue them or by signing in with your own identity provider. [MCP authentication](/platform/mcp/authentication) is the canonical description of both.
+
+## Instructions
+
+Free text sent to every agent that connects, before it sees any tool. Use it for what a tool description cannot carry: house rules, the order you expect calls in, and what you will not do.
+
+## Where to go next
+
+<CardGroup cols={2}>
+  <Card title="Endpoints" icon="regular list-check" href="/platform/mcp/endpoints">
+    Every field on an endpoint, and how it reaches the model.
+  </Card>
+  <Card title="Endpoint types" icon="regular tag" href="/platform/payments/pricing">
+    Free, fixed, dynamic, tiered and session pricing.
+  </Card>
+  <Card title="Authentication" icon="regular key" href="/platform/mcp/authentication">
+    Customer keys and OAuth.
+  </Card>
+  <Card title="Domain and integration" icon="regular globe" href="/platform/mcp/domains">
+    Your own MCP URL, and where Mitu forwards requests.
+  </Card>
+  <Card title="Verify requests" icon="regular shield-check" href="/platform/security/request-verification">
+    Prove a forwarded request came from Mitu.
+  </Card>
+  <Card title="Bring your product to AI agents" icon="regular rocket" href="/guides/use-cases/agent-channels">
+    The end-to-end guide, from integration to a working tool list.
+  </Card>
+  <Card title="Sell your API to AI agents" icon="regular coins" href="/guides/use-cases/api-monetisation">
+    The same MCP, priced: discovery, 402, settlement, delivery.
+  </Card>
+  <Card title="Let AI agents buy from you" icon="regular basket-shopping" href="/guides/use-cases/agent-commerce">
+    Orders, bookings and reservations through the API you already run.
+  </Card>
+  <Card title="Buying through the Mitu MCP" icon="regular cart-shopping" href="/platform/mcp/mitu-mcp">
+    The other direction: one connection an agent uses to buy across the platform.
+  </Card>
+</CardGroup>

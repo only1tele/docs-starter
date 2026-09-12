@@ -1,0 +1,53 @@
+---
+title: Customer keys
+subtitle: An mcpk_ key is one customer's credential for reaching your MCP. It is not a merchant API key.
+---
+
+When you create a customer, Mitu returns a key in the response:
+
+```text
+mcpk_3a6f9d2a6bbc816b11d524fe052b26b7e75fb7b5fa7a1a7d
+```
+
+The customer puts it in their AI client, which sends it on every MCP request:
+
+```http
+x-api-key: mcpk_3a6f9d2a...
+```
+
+`Authorization: Bearer <key>` is also accepted.
+
+## What it is, and is not
+
+```text
+sk_live_... / sk_test_...    your server-side merchant credential
+mcpk_...                     one customer's MCP credential
+```
+
+A customer key:
+
+- identifies exactly one customer
+- authenticates that customer to your MCP
+- is sent as `x-api-key`
+- cannot create wallets
+- cannot read or change your merchant account
+- never reaches your own API
+- is returned once, when the customer is created
+
+It is not a general-purpose API token, and it gives the holder no access to anything beyond the MCP it was issued for.
+
+<Warning title="Never hand out a merchant key">
+An `sk_live_...` or `sk_test_...` key can create customers, wallets and payment links. It belongs on your server and nowhere else. The credential a customer receives is `mcpk_...`, and nothing else.
+</Warning>
+
+## Delivering the key
+
+Only a hash is stored, so the key cannot be retrieved after the create call returns. Capture it at that point and deliver it to the customer the way you would deliver any other credential. If one is lost, issue a new customer key rather than trying to recover the old one.
+
+{/* SCREENSHOT: docs/assets/platform/customers/claude-key-connection.png
+     Caption: "Connecting to the MCP with a customer key." Use a clearly
+     non-production example value. */}
+
+## When to use keys instead of OAuth
+
+Keys suit products where you already provision access for customers, or where you would rather not put the agent channel behind your sign-in. If your customers already have accounts with you, [OAuth](/platform/mcp/authentication) avoids the distribution problem altogether: nothing is handed out, and the customer signs in with what they already have.

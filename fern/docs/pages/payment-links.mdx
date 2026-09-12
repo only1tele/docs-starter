@@ -1,0 +1,132 @@
+---
+title: Payment experiences
+subtitle: "One payment obligation with two ways in: a checkout page a person opens, and a 402-protected URL an agent pays."
+---
+
+A payment link is a charge you create once. Who pays it, and how, is decided afterwards.
+
+```text
+https://mitu.ai/pay/pay_abc123       a person opens this and sees a checkout
+https://api.mitu.ai/pay/pay_abc123   an agent calls this and gets a 402
+```
+
+The two are genuinely different hosts serving different things. The checkout is a page from the web app; the agent URL answers a payment requirement from the API. Handing an agent the checkout URL gets it HTML instead of a challenge.
+
+<Note title="No MCP required">
+A payment link stands on its own. You do not need to expose an API through MCP to create one, and the payer does not need a Mitu Agent Wallet.
+</Note>
+
+## Creating one
+
+```bash title="Create a payment link"
+curl --request POST \
+  --url https://api.mitu.ai/v1/payment-links \
+  --header "x-api-key: $MITU_API_KEY" \
+  --header "Content-Type: application/json" \
+  --data '{
+    "type": "charge",
+    "amount": 25.00,
+    "currency": "USD",
+    "description": "Invoice 8841",
+    "reference": "ORDER-8841",
+    "expiresAt": "2026-10-01T00:00:00Z",
+    "paymentMethods": ["x402", "mpp_spt"],
+    "metadata": { "order_id": "8841" }
+  }'
+```
+
+<ParamField path="type" type="charge | subscription | session | per_request" default="charge">
+  Which payment lifecycle this link has. See [types](#types) below.
+</ParamField>
+
+<ParamField path="amount" type="number" required={true}>
+  Required for `charge` and `per_request`. A `session` link uses `sessionMaxDeposit` instead, and a `subscription` link takes the amount from its plan.
+</ParamField>
+
+<ParamField path="currency" type="string" required={true}>
+  Required except on a `subscription` link, where it comes from the plan.
+</ParamField>
+
+<ParamField path="description" type="string">
+  Shown to the payer on the checkout page.
+</ParamField>
+
+<ParamField path="reference" type="string">
+  Your own identifier, such as `ORDER-8841`. Returned on the payment event, which is what makes reconciliation possible without storing Mitu's id.
+</ParamField>
+
+<ParamField path="expiresAt" type="string">
+  ISO 8601. After it the link stops accepting payment.
+</ParamField>
+
+<ParamField path="paymentMethods" type="array">
+  Any of `x402`, `mpp_crypto`, `mpp_spt`. These constrain the agent path. See [payment methods](/platform/payments/agent-payments).
+</ParamField>
+
+<ParamField path="metadata" type="object">
+  Free-form values returned intact. Not a place for secrets.
+</ParamField>
+
+<ParamField path="planId" type="string">
+  `subscription` only. Use `planIds` with `allowCustomerChoice` to offer several plans.
+</ParamField>
+
+<ParamField path="sessionMaxDeposit" type="number">
+  `session` only, with optional `sessionExpiresAt`.
+</ParamField>
+
+<ParamField path="endpointPattern" type="string">
+  `per_request` only. The path pattern calls are priced against.
+</ParamField>
+
+The response carries `checkoutUrl`. The agent URL is the same id on the API origin, and both are sent together on the `link.created` event:
+
+```json title="link.created"
+"url": {
+  "checkout": "https://mitu.ai/pay/pay_n8d7piu1yc6h",
+  "agent": "https://api.mitu.ai/pay/pay_n8d7piu1yc6h"
+}
+```
+
+{/* SCREENSHOT: docs/assets/platform/payments/create-link.png
+     Caption: "Create a payment request once and make it available to both
+     kinds of payer." */}
+
+## The human path
+
+The payer opens the checkout URL, sees who is charging them, what for, how much, and the methods available to them, and pays. `link.viewed` fires when the page is opened.
+
+{/* SCREENSHOT: docs/assets/platform/payments/human-checkout.png
+     Caption: "A person opens the checkout URL and pays." Use the real
+     checkout, not a mock-up. */}
+
+## The agent path
+
+```text
+GET  https://api.mitu.ai/pay/pay_abc123   answers 402 with the challenges
+POST https://api.mitu.ai/pay/pay_abc123   takes the signed credential
+```
+
+The 402 body is the same payment requirement used everywhere else on the platform, listing the methods you accepted on the link. [The 402 payment flow](/platform/payments/agent-payments) covers every field, and [payment methods](/platform/payments/agent-payments) covers what an agent can settle with.
+
+## Types
+
+<ParamField path="charge" type="">
+  One amount, paid once. Invoices, deposits, service payments, anything where the figure is already known.
+</ParamField>
+
+<ParamField path="subscription" type="">
+  Attaches to a plan and recurs. See [subscriptions](/platform/payments/subscriptions).
+</ParamField>
+
+<ParamField path="session" type="">
+  The payer funds a balance up front and draws it down across many calls. `session.opened` carries the deposit and the on-chain channel; `session.closed` carries what was spent and what was refunded.
+</ParamField>
+
+<ParamField path="per_request" type="">
+  Prices calls against a path pattern. If you are charging per API call, [selling your API to agents](/guides/use-cases/api-monetisation) is the fuller treatment.
+</ParamField>
+
+## Reconciling
+
+Set `reference` to your own identifier and read it back off `payment.completed`. Do not build reconciliation around Mitu's id alone, and do not mark anything paid from the payer's browser: use the verified webhook. [Events](/platform/webhooks/events) has the payloads.
