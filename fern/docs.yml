@@ -1,95 +1,193 @@
 # yaml-language-server: $schema=https://schema.buildwithfern.dev/docs-yml.json
 
 instances:
-  - url: plantstore.docs.buildwithfern.com # update this to {yourorg}.docs.buildwithfern.com
-    # custom-domain: plantstore.dev # specify your custom domain when you are ready to go live
+  - url: mitu.docs.buildwithfern.com
+    # custom-domain: docs.mitu.ai
 
-title: Fern Docs Starter
+title: Mitu API Documentation
 
 layout:
   searchbar-placement: header
   page-width: full
   tabs-placement: header
+  content-width: 800px
+  sidebar-width: 272px
 
 tabs:
   home:
-    display-name: Docs
-    icon: home
-  API Reference:
-    display-name: API Reference
-    icon: puzzle
+    display-name: Home
+    icon: house
+  get-started:
+    display-name: Get started
+    icon: rocket
+  guides:
+    display-name: Guides
+    icon: book-open
+  platform:
+    display-name: Platform
+    icon: layer-group
+  api-reference:
+    display-name: API reference
+    icon: code
 
 navigation:
   - tab: home
     layout:
-      - section: Get started
-        contents:
-          - page: Welcome
-            path: docs/pages/welcome.mdx
-            icon: fa-duotone fa-house
-          - page: Edit your docs
-            path: docs/pages/editing-your-docs.mdx
-            icon: fa-duotone fa-pen-to-square
-          - page: Write content
-            path: docs/pages/writing-content.mdx
-            icon: fa-duotone fa-file-lines
-          - page: Set up navigation
-            path: docs/pages/navigation.mdx
-            icon: fa-duotone fa-sitemap
-          - page: Customize your docs
-            path: docs/pages/customization.mdx
-            icon: fa-duotone fa-palette
-          - page: Support
-            path: docs/pages/support.mdx
-            icon: fa-duotone fa-headset
-      - section: Changelog
-        contents:
-          - changelog: docs/changelog
-  - tab: API Reference
+      - page: Welcome
+        path: docs/pages/home.mdx
+        slug: welcome
+
+  - tab: get-started
     layout:
-      - section: Overview
+      - page: Platform overview
+        path: docs/pages/overview.mdx
+      - page: What we support
+        path: docs/pages/support.mdx
+      - section: Quick start
         contents:
-          - page: API reference
-            path: docs/pages/api-reference-overview.mdx
-            icon: fa-duotone fa-book
-      - api: Plant Store API
-        layout:
-          - section: Plants
-            referenced-packages:
-              - plant
-            contents: []
-          - section: Users
-            referenced-packages:
-              - user
-            contents: []
+          - page: Get set up with Mitu
+            path: docs/pages/setup.mdx
+          - page: Create your first customer
+            path: docs/pages/first-customer.mdx
+          - page: Issue your first wallet
+            path: docs/pages/first-wallet.mdx
+          - page: Accept your first payment
+            path: docs/pages/first-payment.mdx
+          - page: Configure webhooks
+            path: docs/pages/setup-webhooks.mdx
+  - tab: guides
+    layout:
+      - section: Use cases
+        contents:
+          - page: Your app as an agent channel
+            path: docs/pages/uc-app.mdx
+          - page: Sell your API to agents
+            path: docs/pages/uc-sell-api.mdx
+          - page: Let agents buy from you
+            path: docs/pages/uc-buy.mdx
+          - page: Agents that can spend
+            path: docs/pages/uc-spend.mdx
+          - page: Get paid by person or agent
+            path: docs/pages/uc-links.mdx
+          - page: Build on other APIs
+            path: docs/pages/uc-build.mdx
+      - section: Integration guides
+        contents:
+          - page: Accept payment from agents
+            path: docs/pages/guide-byo.mdx
+          - page: Issue wallets to customers
+            path: docs/pages/guide-wallets.mdx
+          - page: Authenticate with your identity provider
+            path: docs/pages/guide-oauth.mdx
+          - page: Payment links
+            path: docs/pages/guide-links.mdx
+  - tab: platform
+    layout:
+      - section: Payments
+        contents:
+          - page: Overview
+            path: docs/pages/payments.mdx
+          - page: 402 payment flow
+            path: docs/pages/flow402.mdx
+          - page: Payment methods
+            path: docs/pages/methods.mdx
+          - page: Dynamic pricing
+            path: docs/pages/dynamic.mdx
+          - page: Paid but not delivered
+            path: docs/pages/undelivered.mdx
+          - page: Payouts
+            path: docs/pages/settlement.mdx
+      - section: Wallets
+        contents:
+          - page: Overview
+            path: docs/pages/wallets.mdx
+          - page: Limits and controls
+            path: docs/pages/limits.mdx
+          - page: Funding
+            path: docs/pages/funding.mdx
+          - page: Wallet tools
+            path: docs/pages/wallet-tools.mdx
+      - section: Customers
+        contents:
+          - page: Customers API
+            path: docs/pages/customers.mdx
+          - page: Customers through OAuth
+            path: docs/pages/oauth-customers.mdx
+      - section: The MCP
+        contents:
+          - page: Overview
+            path: docs/pages/mcp.mdx
+          - page: Endpoints
+            path: docs/pages/endpoints.mdx
+          - page: Endpoint types
+            path: docs/pages/pricing-types.mdx
+          - page: Domain and integration
+            path: docs/pages/domain.mdx
+      - section: Additional information
+        contents:
+          - page: Request signature verification
+            path: docs/pages/verify.mdx
+          - page: Webhooks
+            path: docs/pages/webhooks.mdx
+          - page: Events
+            path: docs/pages/events.mdx
+          - page: Keys, secrets and logs
+            path: docs/pages/dashboard.mdx
+  - tab: api-reference
+    layout:
+      - page: Authentication
+        path: docs/pages/auth.mdx
+      - page: Idempotency
+        path: docs/pages/idempotency.mdx
+      - page: Endpoints
+        path: docs/pages/reference.mdx
+      - page: Common integration errors
+        path: docs/pages/mistakes.mdx
+      - api: API Reference
 
 navbar-links:
   - type: minimal
-    text: Fork this repo
-    url: https://github.com/fern-api/docs-starter
+    text: Support
+    url: mailto:support@mitu.ai
   - type: filled
     text: Dashboard
-    url: https://dashboard.buildwithfern.com
-  - type: github
-    value: https://github.com/fern-api/fern
-      
+    url: https://app.mitu.ai
+
 colors:
-  accent-primary:
-    dark: "#70E155"
-    light: "#008700"
-  background:
-    dark: "#111113"
-    light: "#FFFFFF"
+  # Light only. Giving Fern a dark value for each is what turns dark mode on,
+  # and the artboards have one theme: white ground, ink type.
+  #
+  # Green is a BUTTON FILL with white on it in the design, never a link colour -
+  # prose links are the deep ink, underlined. Fern's accent drives links, so
+  # green here would be 2.28:1 on white.
+  accent-primary: "#062638"
+  background: "#FFFFFF"
+  border: "#e2e2de"
+  sidebar-background: "#FFFFFF"
+  header-background: "#FFFFFF"
+  card-background: "#FFFFFF"
+
+typography:
+  bodyFont:
+    name: Manrope
+    fallback: ["Helvetica", "Arial", "sans-serif"]
+  headingsFont:
+    name: Manrope
+    fallback: ["Helvetica", "Arial", "sans-serif"]
+  codeFont:
+    name: JetBrains Mono
+    fallback: ["ui-monospace", "Menlo", "monospace"]
 
 theme:
   page-actions: toolbar
   footer-nav: minimal
 
 logo:
-  dark: docs/assets/logo-dark.svg
-  light: docs/assets/logo.svg
-  height: 20
-  href: https://buildwithfern.com
+  light: docs/assets/mitu-logo.svg
+  # The artboard draws it at 51px tall inside a 63px box; with the box trimmed
+  # to the artwork, 30 is the same optical size.
+  height: 30
+  href: /
 
 favicon: docs/assets/favicon.svg
 

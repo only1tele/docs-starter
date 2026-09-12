@@ -1,5 +1,6 @@
 # yaml-language-server: $schema=https://schema.buildwithfern.dev/generators-yml.json
 api:
   specs:
+    # Generated from the platform's own OpenAPI document, so the reference
+    # cannot drift from what the API actually accepts.
     - openapi: openapi.yaml
-    - asyncapi: asyncapi.yaml

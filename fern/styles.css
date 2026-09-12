@@ -1,10 +1,519 @@
-/* Custom styles for Fern Docs Starter */
+@import url("https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap");
 
-/* Subtle linear gradient background */
-.fern-background-image {
-  background-image: linear-gradient(180deg, rgba(0, 135, 0, 0.03) 0%, transparent 50%);
+/* ---------------------------------------------------------------------------
+   Mitu docs theme.
+
+   Values are taken from the `Mitu API Docs` artboards rather than rounded to a
+   scale: the dashboard and the docs are meant to look like one product, and
+   the dashboard already ships these exact numbers.
+   --------------------------------------------------------------------------- */
+
+:root {
+  /* Brand. #062638 is the artboards' dark green — CLAUDE.md says #062a1e, but
+     every Mitu screen uses this one. */
+  --mitu-ink: #0b1f2e;
+  --mitu-deep: #062638;
+  --mitu-body: #4a5a4f;
+  --mitu-muted: #6b7a70;
+  --mitu-line: #e2e2de;
+  --mitu-active: #f1f3ee;
+  --mitu-hover: #f6f6f3;
+  --mitu-green: #1ccc50;
+  --mitu-green-hover: #17b446;
+  /* The brand green as TEXT is 2.14:1 on white - bright, and barely legible at
+     14px. This is the same hue scaled until it clears 4.5:1. Fills keep the
+     brand value; only type uses this. */
+  --mitu-green-text: #128434;
+
+  /* The 272px sidebar and 800px column are set in docs.yml, which has real
+     keys for both — no need to fight the theme from here. */
 }
 
-:root.dark .fern-background-image {
-  background-image: linear-gradient(180deg, rgba(112, 225, 85, 0.03) 0%, transparent 50%);
+body {
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Headings carry the artboards' tight tracking; body copy does not. */
+h1 {
+  letter-spacing: -1.4px;
+  line-height: 1.08;
+  color: var(--mitu-ink);
+}
+h2 {
+  letter-spacing: -0.5px;
+  color: var(--mitu-ink);
+}
+h3 {
+  letter-spacing: -0.3px;
+  color: var(--mitu-ink);
+}
+
+/* The lead paragraph under a page title, 17px in the design. */
+.fern-page-subtitle {
+  font-size: 17px;
+  line-height: 1.6;
+  color: var(--mitu-body);
+  text-wrap: pretty;
+}
+
+/* Sidebar: 14px, 500 until current, then 700 on the pale green ground. */
+.fern-sidebar-link-text {
+  font-size: 14px;
+  font-weight: 500;
+  color: #3a4a40;
+}
+.fern-sidebar-link:hover {
+  background: var(--mitu-hover);
+}
+.fern-sidebar-link[data-state="active"] {
+  background: var(--mitu-active);
+}
+.fern-sidebar-link[data-state="active"] .fern-sidebar-link-text {
+  font-weight: 700;
+  color: var(--mitu-ink);
+}
+
+/* Group headings, and the smaller sub-headings inside them. */
+.fern-sidebar-heading {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--mitu-ink);
+}
+.fern-sidebar-group .fern-sidebar-heading {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--mitu-muted);
+}
+
+/* Cards: square-ish corners and a dark border on hover, not a shadow. */
+.fern-card {
+  border: 1px solid var(--mitu-line);
+  border-radius: 8px;
+  transition: border-color 0.15s ease;
+}
+.fern-card:hover {
+  border-color: var(--mitu-ink);
+  box-shadow: none;
+}
+.fern-card-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--mitu-ink);
+}
+
+/* Code blocks sit on the brand ink rather than a neutral grey. */
+.fern-code-block,
+pre {
+  border-radius: 8px;
+}
+
+/* Inline code: the pale green chip from the artboards. */
+:not(pre) > code {
+  font-family: "JetBrains Mono", ui-monospace, Menlo, monospace;
+  font-size: 13.5px;
+  background: var(--mitu-active);
+  color: var(--mitu-ink);
+  padding: 2px 6px;
+  border-radius: 5px;
+  border: 0;
+}
+
+/* Links in prose: deep green, underlined, offset.
+
+   Scoped to links inside a paragraph or a list item. Applied to every anchor
+   it also caught the cards and the rows below, which underlined a whole page
+   of headings and body copy. */
+.fern-prose p > a,
+.fern-prose li > a {
+  color: var(--mitu-deep);
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+/* Header: the filled Dashboard button. */
+.fern-navbar-link[data-variant="filled"] {
+  background: var(--mitu-green);
+  color: #fff;
+  border-radius: 8px;
+  font-weight: 700;
+}
+.fern-navbar-link[data-variant="filled"]:hover {
+  background: var(--mitu-green-hover);
+}
+
+/* Table of contents, hidden below 1180px exactly as the design does. */
+@media (max-width: 1180px) {
+  .fern-table-of-contents {
+    display: none !important;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   The row list from the home artboard.
+
+   Not cards: a rule above the first row and below each one, with the title in
+   a fixed 220px column, the description filling the rest, and an arrow at the
+   end. Cards were the wrong shape and made six boxes of what the design shows
+   as one list.
+   --------------------------------------------------------------------------- */
+
+.mitu-list {
+  margin-top: 16px;
+  border-top: 1px solid var(--mitu-line);
+}
+
+.mitu-row {
+  display: grid;
+  grid-template-columns: 220px minmax(0, 1fr) 16px;
+  gap: 16px;
+  padding: 16px 0;
+  border-bottom: 1px solid var(--mitu-line);
+  align-items: baseline;
+  text-decoration: none;
+}
+
+.mitu-row-title {
+  font-size: 15.5px;
+  font-weight: 700;
+  color: var(--mitu-ink);
+}
+
+.mitu-row-body {
+  font-size: 15px;
+  line-height: 1.55;
+  color: #3a4a40;
+}
+
+.mitu-row-arrow {
+  align-self: center;
+  color: var(--mitu-muted);
+}
+
+.mitu-row:hover .mitu-row-arrow {
+  color: var(--mitu-ink);
+}
+
+/* One column once the fixed title column stops fitting. */
+@media (max-width: 900px) {
+  .mitu-row {
+    grid-template-columns: minmax(0, 1fr) 16px;
+  }
+  .mitu-row-title {
+    grid-column: 1 / -1;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   The Home tab cover.
+
+   `layout: custom` renders no title, no prose styles and no column — which is
+   what lets the eyebrow sit ABOVE the H1; every other layout puts the
+   frontmatter title first and nothing can precede it. So the page declares
+   everything it needs here, from the same tokens as the rest of the docs.
+   --------------------------------------------------------------------------- */
+
+/* Sampled from the reference render, except the button: that measured as a
+   dark forest green, and the brand green is the one to use. The rest stands -
+   the cover runs cooler than the other pages, with a cool grey card line
+   rather than the warm one. */
+.mitu-cover {
+  --cover-btn: var(--mitu-green);
+  --cover-line: #e8ebee;
+  --cover-band: #f1f4f3;
+  --cover-cta: #f3f5f8;
+
+  max-width: 910px;
+  margin: 0 auto;
+  padding: 56px clamp(20px, 4vw, 48px) 96px;
+}
+
+
+.mitu-title {
+  margin: 0;
+  font-size: clamp(32px, 3.4vw, 40px);
+  font-weight: 800;
+  letter-spacing: -1.1px;
+  line-height: 1.1;
+  color: var(--mitu-ink);
+}
+
+
+.mitu-p {
+  margin: 14px 0 0;
+  font-size: 16.5px;
+  font-weight: 400;
+  line-height: 1.65;
+  color: var(--mitu-body);
+}
+
+.mitu-hero-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 30px;
+}
+.mitu-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 42px;
+  padding: 0 18px;
+  border-radius: 8px;
+  font-size: 14.5px;
+  font-weight: 700;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+.mitu-btn-primary {
+  background: var(--cover-btn);
+  color: #fff;
+  border: 1px solid var(--cover-btn);
+}
+.mitu-btn-primary:hover {
+  background: var(--mitu-green-hover);
+  color: #fff;
+}
+.mitu-btn-ghost {
+  background: #fff;
+  color: var(--mitu-ink);
+  border: 1px solid var(--cover-line);
+}
+.mitu-btn-ghost:hover {
+  border-color: var(--mitu-ink);
+}
+
+/* A section heading with its "view all" on the same baseline. */
+.mitu-sec-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  margin: 64px 0 18px;
+}
+.mitu-sec-head h2 {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 800;
+  letter-spacing: -0.5px;
+  color: var(--mitu-ink);
+}
+.mitu-sec-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--mitu-muted);
+  text-decoration: none;
+}
+.mitu-sec-link:hover {
+  color: var(--mitu-ink);
+}
+
+.mitu-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+.mitu-card {
+  border: 1px solid var(--cover-line);
+  border-radius: 10px;
+  padding: 22px;
+  transition: border-color 0.15s ease;
+}
+.mitu-card:hover {
+  border-color: #d3d9df;
+}
+.mitu-card h3 {
+  margin: 14px 0 0;
+  font-size: 16.5px;
+  font-weight: 700;
+  letter-spacing: -0.2px;
+  color: var(--mitu-ink);
+}
+.mitu-card p {
+  margin: 8px 0 0;
+  font-size: 14.5px;
+  line-height: 1.55;
+  color: var(--mitu-body);
+}
+.mitu-card > a,
+.mitu-step > a {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 16px;
+  font-size: 14px;
+  color: var(--mitu-green-text);
+  text-decoration: none;
+}
+.mitu-card > a:hover,
+.mitu-step > a:hover {
+  color: #0e6628;
+}
+.mitu-arrow {
+  transition: transform 0.15s ease;
+}
+.mitu-card > a:hover .mitu-arrow,
+.mitu-step > a:hover .mitu-arrow {
+  transform: translateX(3px);
+}
+
+/* A bare green line icon, no tinted square behind it. */
+.mitu-cardicon {
+  display: block;
+  color: var(--mitu-green);
+}
+
+.mitu-band {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 28px;
+  flex-wrap: wrap;
+  margin-top: 56px;
+  padding: 24px 26px;
+  border-radius: 10px;
+  background: var(--cover-band);
+}
+.mitu-band-text {
+  min-width: 0;
+  flex: 1 1 380px;
+}
+.mitu-band h2 {
+  margin: 0;
+  font-size: 16px;
+  letter-spacing: -0.2px;
+  color: var(--mitu-ink);
+}
+.mitu-band p {
+  margin: 7px 0 0;
+  font-size: 13.5px;
+  line-height: 1.55;
+  color: var(--mitu-body);
+}
+/* The clients, lifted straight out of the design. */
+.mitu-clients {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+}
+/* Every client sits in a tile of the same size. The marks that came without
+   one get a white tile with a hairline border, so the row reads as one set
+   rather than as two black squares and three loose glyphs. */
+.mitu-client-mark,
+.mitu-client-tile,
+.mitu-client-more {
+  box-sizing: border-box;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  object-fit: contain;
+}
+.mitu-client-mark,
+.mitu-client-more {
+  background: #fff;
+  border: 1px solid var(--cover-line);
+}
+.mitu-client-mark {
+  padding: 5px;
+}
+.mitu-client-more {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding-bottom: 5px;
+  font-size: 15px;
+  line-height: 1;
+  color: var(--mitu-muted);
+}
+
+.mitu-steps {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+}
+.mitu-step {
+  border: 1px solid var(--cover-line);
+  border-radius: 10px;
+  padding: 20px;
+}
+.mitu-step-n {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 999px;
+  border: 1px solid var(--cover-line);
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--mitu-ink);
+}
+.mitu-step h3 {
+  margin: 14px 0 0;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--mitu-ink);
+}
+.mitu-step p {
+  margin: 6px 0 0;
+  font-size: 14px;
+  line-height: 1.55;
+  color: var(--mitu-body);
+}
+
+.mitu-cta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  flex-wrap: wrap;
+  margin-top: 64px;
+  padding: 24px 26px;
+  border-radius: 10px;
+  background: var(--cover-cta);
+}
+.mitu-cta h2 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 800;
+  color: var(--mitu-ink);
+}
+.mitu-cta p {
+  margin: 6px 0 0;
+  font-size: 14.5px;
+  color: var(--mitu-body);
+}
+
+@media (max-width: 900px) {
+  .mitu-grid,
+  .mitu-steps {
+    grid-template-columns: 1fr;
+  }
+  .mitu-cover {
+    padding-top: 36px;
+  }
+}
+
+/* Only the title carries weight. Everything else on the cover - section
+   headings, card titles, buttons, the eyebrow - sits at 500/600, so the page
+   reads as one voice rather than a stack of shouts. */
+.mitu-cover h2,
+.mitu-cover h3 {
+  font-weight: 600;
+}
+.mitu-cover .mitu-btn,
+.mitu-cover .mitu-sec-link,
+.mitu-cover .mitu-step-n,
+.mitu-cover .mitu-card > a,
+.mitu-cover .mitu-step > a {
+  font-weight: 600;
+}
+.mitu-cover strong {
+  font-weight: 500;
 }
