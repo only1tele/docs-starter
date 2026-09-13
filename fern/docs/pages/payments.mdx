@@ -1,72 +1,98 @@
 ---
 title: Accepting payment
-subtitle: How an AI agent satisfies a charge programmatically, before it is given what it asked for.
+subtitle: How an AI agent completes a payment before your API delivers the product, service or action it requested.
 ---
 
 ## How agent payments work
 
-When an AI agent calls a paid operation, Mitu handles the payment before your API processes the request.
+When an AI agent calls a paid operation, Mitu handles the payment before your API processes the request. The agent receives a payment requirement, completes the payment using a supported method and, once payment is confirmed, Mitu sends the paid request to your API.
 
 <Frame caption="Mitu completes the payment before your API is asked to do any work.">
   <img src="../assets/diagrams/payments-overview.png" alt="Sequence diagram with three participants: AI Agent, Mitu and Your API. The agent calls a paid tool. Mitu replies with 402 Payment Required and the accepted methods. The agent completes the payment. Mitu processes and confirms it, then sends the request with the payment confirmation to Your API. Your API verifies Mitu, processes the request, and returns the result through Mitu to the agent." />
 </Frame>
 
-Once payment is confirmed, Mitu sends the request to your API with the payment amount, the request id and a verification signature. Verify the request before delivering the product or service: [request verification](/platform/security/request-verification) covers how, and [agent payments](/platform/payments/agent-payments) covers the whole exchange in detail.
+Once payment is confirmed, your API receives the request with payment context and a verification signature. Verify that the request came through Mitu before delivering the product or service, then process it using your existing business logic and return your normal response.
 
-You decide which methods to accept. The payer decides which of those it can settle. Neither side negotiates: the requirement lists the options and the agent takes one.
+See [Request verification](/platform/security/request-verification) for verifying incoming requests and [Agent payments](/platform/payments/agent-payments) for the complete payment flow.
 
-<Note title="A wallet is not a prerequisite">
-The payer does not need a Mitu Agent Wallet in order to pay you. An agent can settle from its own funds. [Agent Wallets](/platform/agent-wallets/overview) are a separate product, for businesses that want to issue spending power to their own customers, and a wallet is one possible source of it.
+<Note title="An Agent Wallet is not required">
+  An AI agent does not need a Mitu Agent Wallet to pay you. Agent Wallets are a separate capability for businesses that want to give their own customers wallets their AI agents can spend from. An Agent Wallet is one possible source of funds for an agent payment.
 </Note>
 
 ## Payment methods
 
-Two families, three methods:
+Mitu supports agent payments through **x402 and MPP**. You choose which supported methods are available for the paid operation, and the agent uses a method it can complete.
 
-- **x402** settles in USDC on Base.
-- **MPP** covers `mpp_crypto`, which settles in USDC on Tempo, and `mpp_spt`, a card-backed payment for payers with no wallet.
+Your API does not need separate integrations for each payment protocol. Mitu handles the payment flow and sends your API the paid request once payment has been confirmed.
 
-[Payment methods](/platform/payments/agent-payments) covers each in detail.
+See [Agent payments](/platform/payments/agent-payments) for supported payment methods and how each works.
 
 ## What gets charged
 
-Price is a property of the endpoint, not of the payer. An endpoint is `free`, `fixed`, `dynamic`, `tiered` or `session`, and that setting decides whether a call produces a payment requirement at all. See [endpoint types](/platform/payments/pricing).
+Pricing is configured on the operation rather than determined by the payer. An operation can be free or use a pricing model such as fixed, dynamic, tiered or session pricing.
 
-## Paying from a wallet you issued
+For fixed pricing, the amount is already known when the agent calls the operation. With dynamic pricing, your API determines the amount from the request before the agent pays. Other pricing models support different usage patterns.
 
-If the caller is one of your customers and holds a wallet you issued, their agent has a `pay` tool and settles the charge from a wallet they name:
+See [Pricing](/platform/payments/pricing) for the available pricing models and how amounts are determined.
 
-```text
-pay({ endpoint: "/orders", method: "POST", body: {...}, wallet: "Travel" })
-```
+## Paying with an Agent Wallet
 
-The destination is always your own endpoint. An agent cannot point this at an arbitrary URL.
+If the agent is acting for a customer who has a funded Agent Wallet, that wallet can be used to complete supported payments on the customer's behalf.
+
+When payment is required, the agent receives a payment URL and passes it to Mitu's `pay` tool. Mitu uses an Agent Wallet available to the connected customer, checks the wallet balance and applicable controls, and completes the payment when it is permitted.
+
+The customer remains the owner of the funds. Their agent cannot withdraw funds, change wallet controls or take ownership of the wallet simply because it can use the wallet for payments.
+
+See [Wallet tools](/platform/agent-wallets/wallet-tools) for the current `pay` tool schema and [Build agents that can pay](/guides/use-cases/agent-purchasing) for the complete purchasing flow.
+
+## After payment
+
+Payment confirmation does not replace fulfilment. Once payment is complete, your API still needs to verify the request and deliver the product, service or action the agent paid for.
+
+If your API cannot complete the operation after payment, treat payment and fulfilment as separate states. Do not ask the agent to make the same payment again simply because delivery failed.
+
+See [Agent payments](/platform/payments/agent-payments) for handling paid requests, retries and payments that complete without successful delivery.
+
+## Settlement
+
+Payments you receive from AI agents are added to your Mitu balance. The payment method used by the agent does not change how your business settles the resulting funds.
+
+From your balance, you can settle funds to a supported bank account or withdraw them to an onchain address.
+
+See [Settlement](/platform/payments/settlement).
 
 ## Related
 
 <CardGroup cols={2}>
-  <Card title="The 402 payment flow" icon="regular arrow-right-arrow-left" href="/platform/payments/agent-payments">
-    The payment requirement, field by field.
+  <Card title="Agent payments" icon="regular arrow-right-arrow-left" href="/platform/payments/agent-payments">
+    Understand the complete agent payment flow.
   </Card>
-  <Card title="Payment methods" icon="regular coins" href="/platform/payments/agent-payments">
-    x402, `mpp_crypto` and `mpp_spt`.
+
+  <Card title="Pricing" icon="regular calculator" href="/platform/payments/pricing">
+    Configure how the amount for a paid operation is determined.
   </Card>
-  <Card title="Dynamic pricing" icon="regular calculator" href="/platform/payments/pricing">
-    Quoting a price per call.
+
+  <Card title="Request verification" icon="regular shield-check" href="/platform/security/request-verification">
+    Verify requests before delivering paid work.
   </Card>
-  <Card title="Paid but not delivered" icon="regular triangle-exclamation" href="/platform/payments/agent-payments">
-    When settlement succeeds and your endpoint does not.
+
+  <Card title="Agent Wallets" icon="regular wallet" href="/platform/agent-wallets/overview">
+    Give customers wallets their AI agents can use for permitted payments.
   </Card>
+
   <Card title="Sell your API to AI agents" icon="regular rocket" href="/guides/use-cases/api-monetisation">
-    Charging for an API call, end to end.
+    Charge AI agents for access to API capabilities.
   </Card>
+
   <Card title="Let AI agents buy from you" icon="regular basket-shopping" href="/guides/use-cases/agent-commerce">
-    Charging for an order or a booking, end to end.
+    Accept agent payments for orders, bookings and other purchases.
   </Card>
-  <Card title="Payment links" icon="regular link" href="/platform/payments/payment-experiences">
-    One charge, payable by a person or an agent.
+
+  <Card title="Payment experiences" icon="regular link" href="/platform/payments/payment-experiences">
+    Create payments that can be completed by people or AI agents.
   </Card>
-  <Card title="Payouts" icon="regular building-columns" href="/platform/payments/settlement">
-    Getting the money out.
+
+  <Card title="Settlement" icon="regular building-columns" href="/platform/payments/settlement">
+    Settle your balance to a bank account or onchain address.
   </Card>
 </CardGroup>

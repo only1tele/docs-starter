@@ -1,11 +1,17 @@
 ---
 title: Subscriptions
-subtitle: A plan defines what recurs and how often. A subscription attaches a payer to one.
+subtitle: Create recurring payment plans and subscribe customers to them.
 ---
+
+Subscriptions let you charge customers on a recurring schedule. Start by creating a plan that defines what is being sold, how much it costs and how often it should be charged. A subscription then connects a customer to that plan and manages the recurring billing relationship.
+
+Each billing cycle creates a charge associated with the subscription. You can track successful charges, failed payments and subscription state through the API and webhook events.
 
 ## Plans
 
-A plan is the product: an amount, a currency, and how often it is charged.
+A plan defines the recurring product or service. It contains the amount, currency and billing interval that subscriptions created from it will use.
+
+For example, the following plan charges \$49 every month for a Pro subscription.
 
 ```bash title="Create a plan"
 curl --request POST \
@@ -18,33 +24,35 @@ curl --request POST \
     "amount": 49.00,
     "currency": "USD",
     "billingInterval": "month",
-    "features": ["Unlimited lookups", "Priority support"]
+    "features": [
+      "Unlimited lookups",
+      "Priority support"
+    ]
   }'
 ```
 
-<ParamField path="name" type="string" required={true}>
-  What the payer sees.
-</ParamField>
+### Plan parameters
 
-<ParamField path="amount" type="number" required={true}>
-  Charged once per interval.
-</ParamField>
+| Parameter | Type | Description |
+| --- | --- | --- |
+| `name` | `string` · required | The name of the plan shown to the payer. |
+| `description` | `string` | Additional information describing the product or service included in the plan. |
+| `amount` | `number` · required | The amount charged during each billing interval. |
+| `currency` | `string` · required | The currency used for recurring charges under the plan. |
+| `billingInterval` | `day` \| `week` \| `month` \| `year` · required | How often subscribers to the plan are charged. |
+| `features` | `array` | A list of features or benefits associated with the plan. |
 
-<ParamField path="currency" type="string" required={true} />
+## Plan status
 
-<ParamField path="billingInterval" type="day | week | month | year" required={true}>
-  How often the charge recurs.
-</ParamField>
+A plan can be `active`, `paused` or `archived`. Use the plan status to control whether the plan should continue being offered without changing the subscriptions and billing history already associated with it.
 
-<ParamField path="features" type="array">
-  Strings shown alongside the plan.
-</ParamField>
+Keep plans stable once customers are using them. If you are introducing materially different pricing or terms, creating another plan can make the resulting subscription history easier to understand than changing the meaning of an existing plan.
 
-A plan is `active`, `paused` or `archived`.
+## Create a subscription
 
-## Subscriptions
+A subscription connects a subscriber to a plan and starts the recurring billing relationship.
 
-```bash title="Subscribe someone to a plan"
+```bash title="Create a subscription"
 curl --request POST \
   --url https://api.mitu.ai/v1/subscriptions \
   --header "x-api-key: $MITU_API_KEY" \
@@ -57,39 +65,117 @@ curl --request POST \
   }'
 ```
 
-<ParamField path="subscriptionPlanId" type="string" required={true} />
+### Subscription parameters
 
-<ParamField path="paymentMethod" type="mpp_crypto | mpp_spt" required={true}>
-  How the recurring charge settles.
-</ParamField>
+| Parameter | Type | Description |
+| --- | --- | --- |
+| `subscriptionPlanId` | `string` · required | The plan the subscriber is joining. The subscription uses the amount, currency and billing interval configured on this plan. |
+| `paymentMethod` | `mpp_crypto` \| `mpp_spt` · required | The payment method used for recurring charges. |
+| `subscriberId` | `string` | The identifier of the user or agent associated with the subscription. |
+| `subscriberType` | `agent` \| `user` | Identifies whether the subscriber is a user or an agent. The default is `agent`. |
 
-<ParamField path="subscriberId" type="string">
-  The agent or user that subscribed.
-</ParamField>
+<Note title="Recurring payment methods">
+  Subscription charges use MPP because the payment method needs to support future recurring charges. Supported subscription payment methods are `mpp_crypto` and `mpp_spt`.
 
-<ParamField path="subscriberType" type="agent | user" default="agent" />
+  x402 is used for one-time payment authorisations and cannot be selected as the recurring payment method for a subscription.
+</Note>
 
-<Warning title="Recurring charges settle over MPP only">
-`x402` is a one-time authorisation signed for a specific amount and recipient, so it cannot carry a future charge. A subscription takes `mpp_crypto` or `mpp_spt`, and passing `x402` is rejected.
-</Warning>
+See [Agent payments](/platform/payments/agent-payments) for more information about supported payment methods.
 
-A subscription is `active`, `past_due`, `paused`, `cancelled` or `expired`.
+## Subscription lifecycle
 
-```text
-POST /v1/subscriptions/{id}/cancel    stop it
-GET  /v1/subscriptions/{id}/invoices  what it has generated
+A subscription moves through states as recurring charges are attempted and the billing relationship changes.
+
+| Status | Meaning |
+| --- | --- |
+| `active` | The subscription is active and can continue billing |
+| `past_due` | A scheduled charge was not completed successfully |
+| `paused` | Recurring billing is temporarily paused |
+| `cancelled` | The subscription has been cancelled |
+| `expired` | The subscription has reached the end of its lifecycle |
+
+Use subscription state together with webhook events to determine whether access to your own product or service should continue. For example, your application may respond differently to a `past_due` subscription than to one that has been explicitly cancelled.
+
+Your own application remains responsible for the product behaviour associated with these states, such as restricting access, notifying a customer or allowing a grace period.
+
+## Cancel a subscription
+
+Cancel a subscription when recurring billing should stop.
+
+```http
+POST /v1/subscriptions/{id}/cancel
 ```
 
-Each charge produces an invoice, itself `pending`, `paid`, `failed`, `refunded` or `void`.
+Cancellation changes the billing relationship for that subscription. Keep the subscription record rather than treating cancellation as deletion so your application retains its billing history.
 
-## Offering plans through a link
+## Subscription invoices
 
-A payment link of type `subscription` carries a `planId`, or several through `planIds` with `allowCustomerChoice`, which lets the payer pick. Amount and currency come from the plan rather than from the link. See [payment links](/platform/payments/payment-experiences).
+Each recurring charge produces an invoice associated with the subscription. These invoices give you a record of individual billing periods while the subscription represents the overall recurring relationship.
 
-{/* SCREENSHOT: docs/assets/platform/payments/subscription.png
-     Caption: "Use subscriptions when the payer keeps a recurring service
-     active." */}
+Retrieve the invoices generated for a subscription with:
 
-## Events
+```http
+GET /v1/subscriptions/{id}/invoices
+```
 
-`plan.created`, `subscription.created`, `subscription.charged`, `subscription.past_due` and `subscription.cancelled` are all emitted. [Events](/platform/webhooks/events) covers delivery.
+Use the generated invoices when you need to inspect individual charges or reconcile a particular billing period. The subscription itself should remain the source for understanding the overall recurring relationship and its current state.
+
+See [Invoices](/platform/payments/invoices) for invoice lifecycle and payment behaviour.
+
+## Let the payer choose a plan
+
+You can also offer subscriptions through a payment experience instead of creating the subscription directly for a specific subscriber.
+
+Create a payment experience with `type` set to `subscription` and associate it with the plan you want to offer. If the payer should be able to choose between several plans, provide the available plans and enable customer choice.
+
+The amount and currency come from the selected plan rather than being configured separately on the payment experience. This keeps the plan as the source of truth for the recurring price.
+
+A subscription payment experience can be completed through the appropriate payer flow, allowing you to offer recurring plans without building a separate subscription checkout.
+
+See [Payment experiences](/platform/payments/payment-experiences) for creating subscription payment experiences.
+
+## Track subscription events
+
+Use webhook events to keep subscription state in your application up to date.
+
+```text
+plan.created
+subscription.created
+subscription.charged
+subscription.past_due
+subscription.cancelled
+```
+
+`subscription.created` tells you that the recurring relationship has been established, while `subscription.charged` represents a successful recurring charge. A `subscription.past_due` event tells your application that a scheduled charge was not completed successfully.
+
+Use these events to update your own billing records and trigger the appropriate product behaviour. Process webhook events idempotently so a repeated delivery does not apply the same billing change twice.
+
+See [Events](/platform/webhooks/events) for event payloads and [Webhooks](/platform/webhooks/overview) for delivery and verification.
+
+## Plans and subscriptions serve different purposes
+
+A plan describes **what you sell repeatedly**. A subscription describes **who is subscribed to it and the state of that recurring relationship**.
+
+Several subscribers can use the same plan without creating duplicate definitions of the product and its price. Their subscription states and generated invoices remain independent, so one subscriber becoming past due does not affect anyone else using the same plan.
+
+Keeping those concepts separate also makes it easier to introduce new plans while preserving the billing history of existing subscriptions.
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="Payment experiences" icon="regular link" href="/platform/payments/payment-experiences">
+    Offer subscription plans through human and agent payment experiences.
+  </Card>
+
+  <Card title="Invoices" icon="regular file-invoice" href="/platform/payments/invoices">
+    Understand the invoices generated by recurring charges.
+  </Card>
+
+  <Card title="Agent payments" icon="regular credit-card" href="/platform/payments/agent-payments">
+    Understand the payment methods available to AI agents.
+  </Card>
+
+  <Card title="Events" icon="regular waveform" href="/platform/webhooks/events">
+    Track subscription and recurring payment activity.
+  </Card>
+</CardGroup>

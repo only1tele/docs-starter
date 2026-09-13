@@ -3,528 +3,144 @@ title: Accept payments from humans and AI agents
 subtitle: Create a payment once and let a person or an AI agent complete it through the flow designed for them.
 ---
 
-One payment obligation, two entry points. You do not have to decide in advance which kind of payer will settle it.
+Create payment experiences that work for both people and AI agents without maintaining separate payment integrations for each. When you create a payment, you receive two ways to complete it. People can use a hosted checkout, while AI agents can use a programmatic payment URL.
 
-```text
-Human payer   ->  checkout URL  ->  a familiar checkout page
-AI agent      ->  agent URL     ->  402 Payment Required
-```
-
-Both settle the same underlying charge, and both reconcile against the same reference in your own system. This suits invoices, one-off charges, creator and freelancer payments, service fees, subscriptions, recurring billing, prepaid balances, and anything else where the amount is already known and only the payer is uncertain.
-
-A person should not have to understand `402 Payment Required`. An agent should not have to interpret a visual checkout page. Neither is asked to: each gets the entry point built for it, and both settle the same obligation.
+Both entry points represent the same payment and can be reconciled against the same reference in your system. This works well when you already know what needs to be paid, such as an invoice, service fee, order balance or other one-time charge.
 
 <Note title="No MCP required">
-This is about giving one payment request a human path and an agent path. You do not need to expose your product through MCP, and the payer does not need a Mitu Agent Wallet.
+  Your product does not need to be connected through MCP to use these payment experiences. You can create a payment and give the appropriate payment URL directly to a person or AI agent.
 </Note>
 
-## Universal payments, or agent commerce?
+## When to use this
 
-The two look similar and are not. Building on the wrong one is an expensive thing to discover late, so it is worth settling before any code.
+Use this approach when the amount to be paid is already known and you want either a person or an AI agent to be able to complete the payment. For example, you might have an invoice for \$125 that can be paid by the customer directly or by an AI agent acting on their behalf.
 
-**Universal payments starts with the obligation.** You already know what is owed:
-
-```text
-"Pay invoice INV-8841 for $125."
-```
-
-You create the request, and whoever turns up settles it.
-
-**Agent commerce starts with the journey.** The amount does not exist yet, because nobody has chosen anything:
-
-```text
-search -> choose -> price the order -> create it -> pay
-```
-
-The agent has to interact with your product before there is anything to pay for.
-
-```text
-Universal payments    payment first
-Agent commerce        commerce first
-```
-
-If the figure is already on an invoice, a quote or a statement, this is the guide. If an agent has to browse your catalogue to arrive at a total, [let AI agents buy from you](/guides/use-cases/agent-commerce) is.
-
-## How it works
-
-```text
-Your backend creates one payment link
-        |
-Mitu returns the payment and its entry points
-        |
-        +---------------------------+
-        |                           |
-   Human payer                 AI-agent payer
-        |                           |
-   checkout URL                agent URL
-        |                           |
-   the checkout page           402 requirement
-        |                           |
-   pays by what is           settles by x402
-   available to them         or MPP
-        |                           |
-        +----- payment.completed ---+
-                    |
-            carrying your reference
-                    |
-        you reconcile against your own record
-                    |
-           the money sits in your Mitu balance
-                    |
-          bank settlement or on-chain withdrawal
-```
-
-## What you will build
-
-1. Create a payment link.
-2. Get both entry points.
-3. Send the checkout URL to a person.
-4. Give the agent URL to an agent.
-5. Understand the 402 the agent receives.
-6. Track when the link is viewed and paid.
-7. Reconcile both paths against one reference.
-8. List, read and update links.
-9. Use invoices for formal billing.
-10. Use subscriptions for recurring payments.
-11. Use sessions for prepaid usage.
-12. Receive payment events through webhooks.
-13. Handle failed payments.
-14. Settle the funds.
+If an AI agent needs to interact with your product first to discover products, check availability, create an order or calculate the final amount, use [Let AI agents buy from you](/guides/use-cases/agent-commerce) instead.
 
 ## Before you begin
 
-You need a Mitu merchant account, a server-side API key, an amount somebody owes you, a stable identifier from your own system, and a webhook endpoint for production.
-
-<Warning title="Merchant keys stay on your server">
-`sk_live_...` and `sk_test_...` create payment links, invoices and subscriptions. Never put one in a browser, a public checkout page, or an AI client. Nothing the payer touches needs your key.
-</Warning>
+You need a Mitu account, a server-side API key and a payment you want to collect. You should also have a reference from your own system that identifies what the payment belongs to, such as an order ID, invoice number or booking reference.
 
 <Steps toc={true}>
+  <Step title="Create the payment">
+    Create a payment link for the amount you want to collect.
 
-<Step title="Create a payment link">
+    ```bash
+    curl --request POST \
+      --url https://api.mitu.ai/v1/payment-links \
+      --header "x-api-key: $MITU_API_KEY" \
+      --header "Content-Type: application/json" \
+      --data '{
+        "type": "charge",
+        "amount": 125.00,
+        "currency": "USD",
+        "description": "Design services",
+        "reference": "INV-8841",
+        "metadata": {
+          "invoice_id": "8841"
+        }
+      }'
+    ```
 
-```bash title="Create a payment link"
-curl --request POST \
-  --url https://api.mitu.ai/v1/payment-links \
-  --header "x-api-key: $MITU_API_KEY" \
-  --header "Content-Type: application/json" \
-  --data '{
-    "type": "charge",
-    "amount": 25.00,
-    "currency": "USD",
-    "description": "Invoice 8841",
-    "reference": "ORDER-8841",
-    "expiresAt": "2026-10-01T00:00:00Z",
-    "paymentMethods": ["x402", "mpp_spt"],
-    "metadata": { "order_id": "8841" }
-  }'
-```
+    Use `reference` to associate the payment with a record in your own system, such as an invoice number, order ID or booking reference. When the payment completes, the same reference can be returned with the payment event so your backend knows which record should be updated.
 
-`reference` is the field that makes this manageable later. Set it to something your own system already knows, such as `ORDER-8841`, `INV-2026-441` or `BOOKING-9832`. It comes back on the payment event, so you never have to reconcile against Mitu's id alone.
+    Use `metadata` for additional information you want to associate with the payment. Do not store sensitive information or secrets in metadata.
 
-`metadata` takes free-form values that are returned intact. It is not a place for secrets.
+    Learn more about [Payment experiences](/platform/payments/payment-experiences).
+  </Step>
 
-`paymentMethods` constrains what an agent may settle with. Offering more than one costs nothing.
+  <Step title="Use the right payment URL">
+    A payment provides separate entry points for human and agent payers.
 
-{/* SCREENSHOT: docs/assets/use-cases/universal-payments/create-link.png
-     Caption: "Create a payment request once and make it available to human
-     and agent payers." */}
+    ```json
+    {
+      "url": {
+        "checkout": "https://mitu.ai/pay/pay_n8d7piu1yc6h",
+        "agent": "https://api.mitu.ai/pay/pay_n8d7piu1yc6h"
+      }
+    }
+    ```
 
-[Payment links](/platform/payments/payment-experiences) has every field.
+    Use the checkout URL when a person is paying. You can send it through your website, application, email, SMS, WhatsApp or another customer channel. Use the agent URL when an AI agent is paying.
 
-</Step>
+    You do not need to know which type of payer will complete the payment when you create it. Both entry points belong to the same underlying payment.
+  </Step>
 
-<Step title="Use the two entry points">
+  <Step title="Let a person pay">
+    A person opens the checkout URL and completes the payment through the hosted checkout experience. The checkout presents the payment details and the payment methods available to the payer.
 
-The create response carries `checkoutUrl`. The agent URL is the same id on the API origin, and the `link.created` event carries both together:
+    You can use the checkout URL anywhere you would normally share a payment link, such as an invoice, customer portal, message or payment request. Your application does not need to build or maintain the checkout interface.
+  </Step>
 
-```json title="link.created"
-"url": {
-  "checkout": "https://mitu.ai/pay/pay_n8d7piu1yc6h",
-  "agent": "https://api.mitu.ai/pay/pay_n8d7piu1yc6h"
-}
-```
+  <Step title="Let an AI agent pay">
+    When an AI agent receives the agent URL, it can use the URL to complete the payment programmatically. Mitu handles the agent payment flow and the supported payment protocols required to complete the transaction, so your business does not need to implement separate x402 or MPP integrations.
 
-Send the **checkout URL** to a person, by email, SMS, WhatsApp, your own app, or on an invoice. Give the **agent URL** to an AI assistant, an agent workflow, or any system that can handle a payment requirement.
+    Once payment succeeds, it represents the same payment that would have been completed through the human checkout.
 
-<Warning title="They are not interchangeable">
-The checkout URL is a page served from the web app. The agent URL answers a payment requirement from the API. Hand an agent the checkout URL and it gets HTML instead of a challenge; open the agent URL in a browser and there is no page to pay on.
-</Warning>
+    Learn more about [Agent payments](/platform/payments/agent-payments).
+  </Step>
 
-{/* SCREENSHOT: docs/assets/use-cases/universal-payments/payment-link-details.png
-     Caption: "Each payment request has a checkout path for people and a
-     programmatic path for agents." */}
+  <Step title="Reconcile the payment">
+    Whether a person or an AI agent pays, reconcile the payment using the reference from your own system.
 
-</Step>
+    For example, if you created the payment with:
 
-<Step title="Let a person pay">
+    ```json
+    {
+      "reference": "INV-8841"
+    }
+    ```
 
-The payer opens the checkout URL and sees who is charging them, what for, how much, and the methods available to them. `link.viewed` fires when the page is opened.
+    your payment event can be associated with `INV-8841` in your application. This means your backend does not need separate reconciliation logic for human and agent payments because both payer experiences resolve to the same business record.
 
-{/* SCREENSHOT: docs/assets/use-cases/universal-payments/human-checkout.png
-     Caption: "A person opens the checkout URL and completes the payment."
-     Use the real checkout, not a mock-up. */}
+    Do not mark the payment as completed based only on a browser redirect or a response reported by an AI client. Use a verified payment event or retrieve the payment state from the API.
+  </Step>
 
-</Step>
+  <Step title="Receive payment events">
+    Configure webhooks so your backend can receive payment events. When a payment completes, use the event to update the corresponding record in your system.
 
-<Step title="Let an agent pay">
+    For example, if the payment carries the reference `INV-8841`, your webhook handler can use that reference to find the corresponding invoice and mark it as paid. The same handling can be used regardless of whether the payment was completed by a person or an AI agent.
 
-```text
-GET  https://api.mitu.ai/pay/pay_abc123   answers 402 with the challenges
-POST https://api.mitu.ai/pay/pay_abc123   takes the signed credential
-```
+    Learn more about [Webhooks](/platform/webhooks/overview) and [Events](/platform/webhooks/events).
+  </Step>
 
-<Warning title="402 does not mean the payment failed">
-It means payment is required before the request can continue. Nothing has been attempted and nothing has been declined. An integration that logs a 402 as a failed payment will show a failure for every successful agent payment you take.
-</Warning>
+  <Step title="Settle your funds">
+    Funds you receive are added to your Mitu balance, where they can be settled to a supported bank account or withdrawn to an onchain address.
 
-It tells the agent how much is due, in what, which methods you accept, and what it needs to settle one.
+    How the customer paid does not change how you settle the funds. Payments from humans and AI agents become part of the same balance available to your business.
 
-```text
-Agent requests the agent URL
-        |
-402 with the payment requirement
-        |
-It picks a method it supports
-        |
-It settles
-        |
-It submits the credential
-        |
-Payment completes
-```
-
-Agents pay through x402 and MPP, depending on what you accepted on the link and what the payer can satisfy. `mpp_spt` is the card-backed method within MPP rather than a third protocol beside them.
-
-{/* SCREENSHOT: docs/assets/use-cases/universal-payments/agent-payment.png
-     Caption: "An agent receives a machine-readable payment requirement and
-     pays programmatically." */}
-
-[The 402 payment flow](/platform/payments/agent-payments) covers each field and [payment methods](/platform/payments/agent-payments) each method.
-
-</Step>
-
-<Step title="Track viewed and paid">
-
-```text
-link.created      you made the link
-link.viewed       somebody opened the checkout page
-payment.completed it was paid
-```
-
-Both link events carry the payment link id and your `reference`. `link.viewed` comes from somebody opening the checkout page, so do not treat it as a general "somebody is interested" signal covering the agent path.
-
-{/* SCREENSHOT: docs/assets/use-cases/universal-payments/payment-activity.png
-     Caption: "Track when a payment request is opened and when payment
-     completes." */}
-
-</Step>
-
-<Step title="One payment, one reconciliation">
-
-This is the part that makes the product click. Both paths end in the same place.
-
-```text
-Human route                      Agent route
-
-INV-8841                         INV-8841
-    |                                |
-checkout page                    agent URL, 402
-    |                                |
-pays by card or wallet           settles by x402 or MPP
-    |                                |
-    +--------- payment.completed ----+
-                    |
-            reference: INV-8841
-                    |
-        one handler, one database row
-```
-
-Your backend does not branch on who paid. It reads `reference`, finds `INV-8841`, and marks it paid. The two payer experiences exist so that neither payer has to pretend to be the other; they do not have to become two integrations on your side.
-
-Do not make Mitu's ids the only identifiers your application understands, and do not mark anything paid from the payer's browser or from what an AI client reported. Use the verified webhook, or read the state back from the API.
-
-</Step>
-
-<Step title="List, read and update links">
-
-```text
-GET    /v1/payment-links       list them
-GET    /v1/payment-links/{id}  read one
-PATCH  /v1/payment-links/{id}  amend one
-DELETE /v1/payment-links/{id}/cancel
-```
-
-The list filters on `type`, `status`, `reference` and `source`. Filtering by your own `reference` is the useful one: it answers "is there already a link for this invoice" without you having stored Mitu's id.
-
-A `PATCH` changes `expiresAt`, `description`, `reference` and `metadata`. It does not change the amount or the currency. To charge a different figure, cancel the link and create another, so that a link somebody is already looking at cannot change price under them.
-
-</Step>
-
-<Step title="Use invoices for formal billing">
-
-Where the payment belongs to an accounts-receivable workflow, an invoice carries line items, tax, a discount, a due date and an invoice number, and it moves through a lifecycle rather than simply being paid.
-
-```text
-Create a draft
-        |
-Send it
-        |
-The customer receives a payment request
-        |
-A person or an agent pays it
-        |
-The invoice is marked paid
-```
-
-Creating and sending are separate calls, so a draft can be amended before the customer sees it. A sent invoice is payable through the same two entry points, on the `/invoice/` segment.
-
-{/* SCREENSHOT: docs/assets/use-cases/universal-payments/invoice.png
-     Caption: "Use invoices where the payment belongs to a formal billing
-     workflow." */}
-
-[Invoices](/platform/payments/invoices) covers the schema and the lifecycle.
-
-</Step>
-
-<Step title="Use subscriptions for recurring payments">
-
-A plan defines what recurs and how often. A subscription attaches a payer to one.
-
-```text
-Create a plan
-        |
-Create a subscription against it
-        |
-The charge falls due
-        |
-It is collected
-        |
-The subscription state updates
-```
-
-<Warning title="Recurring charges settle over MPP only">
-`x402` is a one-time authorisation signed for a specific amount and recipient, so it cannot carry a future charge. A subscription takes `mpp_crypto` or `mpp_spt`.
-</Warning>
-
-{/* SCREENSHOT: docs/assets/use-cases/universal-payments/subscription.png
-     Caption: "Use subscriptions when the payer keeps a recurring service
-     active." */}
-
-[Subscriptions](/platform/payments/subscriptions) covers plans, states and the invoices a subscription generates.
-
-</Step>
-
-<Step title="Use sessions for prepaid usage">
-
-A payment link of type `session` has the payer fund a balance up front and draw it down across many calls, rather than settling each one.
-
-```text
-The payer funds the session
-        |
-session.opened, with the deposit and the on-chain channel
-        |
-Calls draw against the balance
-        |
-session.closed, with what was spent and what was refunded
-```
-
-Use it where a payment per call would dominate the exchange. [Payment links](/platform/payments/payment-experiences) covers the `sessionMaxDeposit` and `sessionExpiresAt` fields.
-
-</Step>
-
-<Step title="Receive events through webhooks">
-
-Production payment state comes from webhooks, not from the browser, the AI client or the dashboard.
-
-```text
-Receive the delivery
-        |
-Verify the signature with this endpoint's whsec_ secret
-        |
-Check event_id
-        |
-Already processed? Acknowledge and stop
-        |
-Apply the state change
-        |
-Answer 2xx
-```
-
-<Warning title="Two secrets, two directions">
-`whsec_...` signs webhook deliveries Mitu sends to you, and is the one that matters here. `mps_...` signs paid requests Mitu forwards to your API on an agent's behalf. They are different secrets for opposite directions.
-</Warning>
-
-Every retry carries the same `event_id`, so deduplicating on it is what stops one payment being applied twice.
-
-{/* SCREENSHOT: docs/assets/use-cases/universal-payments/webhook.png
-     Caption: "Subscribe to payment events and use webhooks as the source of
-     truth for backend payment state." Mask the secret. */}
-
-[Webhooks](/platform/webhooks/overview) covers delivery and retries.
-
-</Step>
-
-<Step title="Handle failed payments">
-
-`payment.failed` fires when a payment was attempted and did not complete, carrying the amount, the method, your `reference` and a `reason`:
-
-```text
-no_supported_method    the payer could satisfy none of the methods you accept
-insufficient_balance   they did not have the funds
-over_limit             a wallet limit stopped it
-settlement_failed      the settlement itself did not go through
-upstream_rejected      the payment was refused upstream
-```
-
-Not every reason is retryable, and they call for different responses. `no_supported_method` usually means the methods on the link are too narrow for the payers you are reaching.
-
-</Step>
-
-<Step title="Settle the funds">
-
-Everything you receive lands in your Mitu balance as USDC, whoever paid and however. From there you either settle in local currency to your bank account, or withdraw the stablecoin on-chain to an address you control.
-
-How somebody paid you has no bearing on how you take the money out. [Payouts](/platform/payments/settlement) covers both.
-
-{/* SCREENSHOT: docs/assets/use-cases/universal-payments/balance-settlement.png
-     Caption: "Settle received funds to your bank account or withdraw
-     stablecoin on-chain." */}
-
-</Step>
-
+    Learn more about [Settlement](/platform/payments/settlement).
+  </Step>
 </Steps>
 
-## End to end: one invoice, either payer
+## Other payment experiences
 
-<Steps>
+The same payment infrastructure can support more than one-time charges. Use **invoices** when you need formal billing with line items, due dates and an invoice lifecycle, or use **subscriptions** when customers should be charged on a recurring basis.
 
-<Step title="You create the request">
-One call, and you are done with the decision about who pays.
+Use the payment experience that matches what you are collecting rather than building separate human and agent payment systems. Learn more about [Invoices](/platform/payments/invoices) and [Subscriptions](/platform/payments/subscriptions).
 
-```json
-{
-  "type": "charge",
-  "amount": 125.00,
-  "currency": "USD",
-  "description": "Design services",
-  "reference": "INV-8841",
-  "paymentMethods": ["x402", "mpp_spt"]
-}
-```
-</Step>
+## One payment, two payer experiences
 
-<Step title="Mitu returns both paths">
-`checkoutUrl` comes back on the response. Both URLs arrive together on `link.created`.
+Your application can create a payment without needing to know whether a person or an AI agent will ultimately complete it. People receive a checkout experience designed for them, while AI agents receive a programmatic payment experience designed for agents. Both resolve to the same payment and the same reference in your system.
 
-```json
-{
-  "checkout": "https://mitu.ai/pay/pay_n8d7piu1yc6h",
-  "agent": "https://api.mitu.ai/pay/pay_n8d7piu1yc6h"
-}
-```
-</Step>
+You continue to control what is being paid for, the amount and how it maps to your own records. Mitu handles the appropriate payment experience for the payer and makes the resulting funds available for settlement.
 
-<Step title="Whoever shows up pays">
-Neither payer has to pretend to be the other.
-
-```text
-A person   opens the checkout and pays with what is available to them
-An agent   GETs the agent URL, reads the 402, settles by x402 or mpp_spt
-```
-</Step>
-
-<Step title="You are told once">
-The same event either way, carrying your own reference.
-
-```json
-{
-  "event": "payment.completed",
-  "event_data": {
-    "source": "link",
-    "payment_link_id": "pay_n8d7piu1yc6h",
-    "amount_paid": "125.00",
-    "reference": "INV-8841"
-  }
-}
-```
-</Step>
-
-<Step title="You reconcile">
-One handler, one row, no branch on who paid.
-
-```text
-reference: INV-8841  ->  find INV-8841  ->  mark it paid
-```
-</Step>
-
-<Step title="You settle">
-The money sits in your Mitu balance as USDC until you send it to your bank or withdraw it on-chain.
-</Step>
-
-</Steps>
-
-One obligation, two payer experiences, one reconciliation path.
-
-## Common mistakes
-
-<AccordionGroup>
-
-<Accordion title="Treating the agent URL like a checkout page">
-It is a programmatic payment endpoint, not a page. Opening it in a browser shows no checkout, and sending an agent the checkout URL hands it HTML where it expected a challenge. They are different hosts serving different things, and the `link.created` event gives you both so you never have to guess which is which.
-</Accordion>
-
-<Accordion title="Treating 402 as a failed payment">
-It is the payment requirement, not a decline. Nothing has been attempted at that point. Logging it as a failure means every successful agent payment you take appears in your metrics as a failure first.
-</Accordion>
-
-<Accordion title="Putting a merchant key in client code">
-`sk_live_...` and `sk_test_...` create payment links, invoices and subscriptions. Nothing the payer touches needs one. The checkout page needs no key at all, and the agent URL needs the payer's credential, not yours.
-</Accordion>
-
-<Accordion title="Marking an order paid from the browser">
-A redirect back to your site says the payer reached the end of a page, not that money moved. Use `payment.completed`, verified against the webhook secret, or read the state back from the API. This matters more on the agent path, where there is no browser to return from.
-</Accordion>
-
-<Accordion title="Ignoring `reference`">
-Without it, every reconciliation has to start from a Mitu id you had to store and keep in step with your own record. With it, the payment event names your own invoice and the handler is two lines. It costs nothing to set at create time and is awkward to retrofit.
-</Accordion>
-
-<Accordion title="Confusing whsec_ with mps_">
-`whsec_...` signs webhook deliveries Mitu sends you. `mps_...` signs paid requests Mitu forwards to your API on an agent's behalf. They sign opposite directions and are not interchangeable. Verifying a webhook with the wrong secret fails every delivery, which usually gets diagnosed as a delivery problem rather than a key problem.
-</Accordion>
-
-<Accordion title="Waiting for settlement.completed">
-It is a declared event type that nothing currently emits. A flow that waits for it waits forever. Reconcile against `payment.completed`, which fires for every payment you receive.
-</Accordion>
-
-</AccordionGroup>
-
-## The result
-
-You can accept a payment without knowing in advance whether a person or an agent will settle it.
-
-**You control** the amount, the description, the reference, the link type, the methods you accept, the invoice and subscription lifecycles, and where the money goes. **Mitu provides** the checkout, the agent entry point, the payment requirement, the payment state, invoices, subscriptions, sessions, webhooks, and the balance you settle from.
-
-## Next steps
+## Continue building
 
 <CardGroup cols={2}>
-  <Card title="Payment links" icon="regular link" href="/platform/payments/payment-experiences">
-    Every field, both entry points, and the four types.
+  <Card title="Payment experiences" icon="regular link" href="/platform/payments/payment-experiences">
+    Create and manage payments that can be completed by humans or AI agents.
   </Card>
+
   <Card title="Invoices" icon="regular file-invoice" href="/platform/payments/invoices">
-    Line items, tax, due dates and the lifecycle.
+    Create formal billing experiences with line items, due dates and payment tracking.
   </Card>
+
   <Card title="Subscriptions" icon="regular arrows-rotate" href="/platform/payments/subscriptions">
-    Plans, subscriptions and the invoices they generate.
+    Create recurring payment experiences for your customers.
   </Card>
-  <Card title="Accepting payment" icon="regular credit-card" href="/platform/payments/overview">
-    How an agent satisfies a payment requirement.
-  </Card>
-  <Card title="Webhooks" icon="regular bell" href="/platform/webhooks/overview">
-    Verified payment state in your backend.
-  </Card>
-  <Card title="Payouts" icon="regular building-columns" href="/platform/payments/settlement">
-    Bank settlement and on-chain withdrawal.
+
+  <Card title="Settlement" icon="regular building-columns" href="/platform/payments/settlement">
+    Settle the funds you receive to a bank account or onchain address.
   </Card>
 </CardGroup>

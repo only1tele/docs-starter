@@ -1,28 +1,54 @@
 ---
 title: Settlement
-subtitle: What happens to money after it is paid to you.
+subtitle: Settle the funds you receive to a bank account or onchain address.
 ---
 
-Everything you receive lands in your Mitu balance as USDC, whoever paid it and however they paid. A card payment through `mpp_spt` and an on-chain settlement through x402 arrive in the same place.
+Payments you receive are added to your Mitu balance as USDC, regardless of how the payer completed the payment. A payment made through an onchain method and one completed through a card-backed flow ultimately arrive in the same balance, so your business does not need separate settlement processes for different payment methods. From that balance, you can settle funds in local currency to a supported bank account or withdraw USDC to an onchain address you control.
 
-From there, two ways out:
+## Settlement options
 
-**Settle in local currency.** Converted and paid to your bank account.
+You can settle your balance in local currency when you want to receive the funds in a bank account. Mitu converts the amount you are settling into the supported local currency and sends the resulting funds to the bank account you select. If you prefer to keep the funds in stablecoins, you can withdraw USDC onchain to an address you control instead of converting it to local currency.
 
-**Withdraw the stablecoin.** Sent on-chain to an address you control.
+These options are available independently of how the original payment was made. Funds received through different supported payment methods become part of the same balance, and you choose how to settle them based on where your business wants to receive the money.
 
-{/* SCREENSHOT: docs/assets/platform/payments/balance-settlement.png
-     Caption: "Settle received funds to your bank account or withdraw
-     stablecoin on-chain." */}
+## Payment method and settlement are separate
 
-## Payer method and payout destination are separate
+How someone pays your business does not determine how you receive the funds afterwards. An AI agent might complete a payment using an onchain payment method or a card-backed flow, but the resulting funds still become part of your Mitu balance. You can then choose whether to settle those funds to a bank account or withdraw them onchain.
 
-How somebody paid you has no bearing on how you take the money out. You do not need a wallet to accept on-chain payments, and accepting cards does not tie you to a bank payout. The balance is the join between the two halves.
+This separation means accepting onchain payments does not require your business to manage an onchain settlement destination, and accepting card-backed payments does not require you to settle to a bank account. Your payment methods determine how payers can pay you, while your settlement preference determines how you receive the resulting funds.
 
-## From the dashboard
+## Settle from the dashboard
 
-Payouts are a dashboard action, taken by a person signed in to Mitu. There is no payout endpoint in the public API, and that is deliberate: an API key that could move your balance to an arbitrary address would be a key worth stealing.
+Settlement is currently managed from the Mitu dashboard. A signed-in user can choose the amount to settle and select the supported bank account or onchain destination that should receive the funds. This keeps movement of your business balance under the control of an authenticated user rather than making it available through the same server-side API key used to create customers, payments and other resources.
 
-<Note title="settlement.completed is not emitted yet">
-A `settlement.completed` event type exists, but nothing in the current implementation raises it. Do not build a reconciliation flow that waits for it. Reconcile against `payment.completed`, which is emitted for every payment you receive.
+Settlement is not currently available through the public API. Your API integration can create and manage payment resources and track incoming payments, while movement of the resulting balance is handled separately from the dashboard.
+
+<Note title="Settlement events">
+  `settlement.completed` is not currently emitted, so your application should not wait for this event when reconciling incoming payments. Use `payment.completed` to confirm that a payment has been received and keep payment reconciliation separate from the later settlement of your Mitu balance.
 </Note>
+
+## Payment and settlement state
+
+Payment and settlement represent different stages of the money flow. A completed payment means the payer has successfully paid your business and the funds have been added to your Mitu balance. Settlement happens afterwards when you move some or all of that balance to a bank account or onchain address.
+
+Keep these states separate in your own reporting and business logic. An order, booking or invoice can already be paid even though the corresponding funds are still sitting in your Mitu balance, so fulfilment should not need to wait for settlement unless your own business rules specifically require it.
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="Payments" icon="regular credit-card" href="/platform/payments/overview">
+    Understand how payments move through Mitu.
+  </Card>
+
+  <Card title="Agent payments" icon="regular robot" href="/platform/payments/agent-payments">
+    Understand how AI agents complete payments.
+  </Card>
+
+  <Card title="Payment experiences" icon="regular link" href="/platform/payments/payment-experiences">
+    Create payments that can be completed by people or AI agents.
+  </Card>
+
+  <Card title="Events" icon="regular waveform" href="/platform/webhooks/events">
+    Track payment activity in your application.
+  </Card>
+</CardGroup>

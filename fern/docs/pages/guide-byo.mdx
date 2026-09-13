@@ -1,587 +1,184 @@
 ---
 title: Accept payments from agents
-subtitle: Configure a paid operation, answer a payment requirement, handle the paid request, verify it came from Mitu, and return the result.
+subtitle: Configure paid operations that AI agents can use, while Mitu handles the payment flow before your API fulfils the request.
 ---
 
-You already have an API, a product, an order or a booking. This guide takes it from there to an AI agent calling it, being told what it costs, paying, and receiving what it asked for.
+Accept payments from AI agents without implementing payment protocols yourself. Connect the API that already powers your product, choose the operations agents should pay for and configure how those operations are priced.
 
-```text
-An agent calls your paid operation
-        |
-Mitu answers 402 with what it accepts
-        |
-The agent settles one of the challenges
-        |
-Mitu confirms the settlement
-        |
-Mitu calls your API with a signed paid request
-        |
-You verify the signature
-        |
-You do the work
-        |
-You return the result, and the agent receives it
-```
+When an agent uses a paid operation, Mitu handles the payment flow between the agent and your API. Once payment is confirmed, your backend receives the request, verifies that it came through Mitu and delivers the product, service or result as it normally would.
 
-With dynamic pricing there is one more leg at the front, because you have to be asked the price before anybody can pay it:
-
-```text
-The agent calls
-        |
-Mitu calls you with NO x-mitu-amount-charged
-        |
-You calculate the price and answer 402
-        |
-The agent pays
-        |
-Mitu calls you again WITH x-mitu-amount-charged
-        |
-You verify, then do the work
-```
+<Note title="Mitu handles the agent payment flow">
+  You do not need to build separate x402 or MPP integrations into your API. Configure the paid operation and the payment methods you want to support, and Mitu handles the payment flow with the agent.
+</Note>
 
 ## Before you begin
 
-You need a Mitu merchant account, an API that will receive paid requests, your signing secret, and at least one operation configured as paid.
+You need a Mitu account, a server-side API key, an API that Mitu can reach and at least one operation you want AI agents to pay for. You also need the signing secret provided when you connect your API so your backend can verify requests sent through Mitu.
 
-Three credentials appear in this guide and they are not interchangeable:
-
-| | What it is | Where it lives |
-| --- | --- | --- |
-| `sk_live_...` / `sk_test_...` | Your merchant key, for Mitu's management APIs | Your server only |
-| `mps_...` | Your signing secret, for verifying requests Mitu forwards to you | Your server only |
-| `whsec_...` | A webhook endpoint's secret, for verifying deliveries Mitu sends you | Your server only |
-
-`mps_` and `whsec_` sign opposite directions. Using one where the other belongs fails every check, and usually gets diagnosed as a delivery problem rather than a key problem.
+If your API is not connected yet, start with [Connect to AI agents](/guides/integration-guides/connect-to-ai-agents).
 
 <Steps toc={true}>
+  <Step title="Connect your API">
+    Start with the API that already powers your product. In the dashboard, provide the base URL Mitu should use when calling your API.
 
-<Step title="Connect your API">
+    ```text
+    https://api.example.com
+    ```
 
-In the dashboard, set the base URL Mitu should forward to.
+    You do not need to create separate endpoints for paid agent requests. Your existing API can continue handling the underlying product, order, booking, report or other service you already provide.
 
-```text
-https://api.example.com
-```
+    When you connect the API, Mitu provides a signing secret that your backend uses to verify requests sent through Mitu. Keep this secret on your server and use it to verify requests before processing them.
 
-Add the health-check path if you have one, so the dashboard can show whether your API is reachable.
+    Learn more about [Request verification](/platform/security/request-verification).
+  </Step>
 
-Mitu holds no credential for your API. Authenticity runs the other way: every forwarded request is signed with your `mps_...` secret, and your backend checks that signature. Nothing you deploy needs to hold a Mitu key to serve a paid call.
+  <Step title="Choose what agents can pay for">
+    Select the operations that should require payment when an AI agent uses them. You can keep some operations free while charging for others based on the value they provide.
 
-**Check before moving on:** the service shows as reachable, and you have your signing secret from the Integration page.
+    For example, a research product might let agents search companies for free while charging to generate a complete company report.
 
-</Step>
+    ```yaml
+    name: company_report
+    method: POST
+    path: /reports
+    description: Generates a company report for a domain
+    when_to_use: Use after the customer has confirmed the company and report they want
+    pricing_type: fixed
+    price: 5.00
+    requires_auth: false
+    ```
 
-<Step title="Add the operation agents will pay for">
+    Describe the operation clearly so an AI agent can understand what it provides and when it should be used. Your existing endpoint remains responsible for the actual work after payment has been confirmed.
 
-Register the operation as an endpoint. It becomes a tool an agent can discover, priced.
+    Learn more about [MCP endpoints](/platform/mcp/endpoints).
+  </Step>
 
-```yaml
-name: company_report
-method: POST
-path: /reports
-description: Generates a company report for a domain, priced by the sections requested
-when_to_use: Use once the customer has confirmed the company and the sections they want
-pricing_type: dynamic
-requires_auth: false
-```
+  <Step title="Configure the price">
+    Choose a pricing model that matches how you charge for the operation. Use fixed pricing when every request costs the same amount, or dynamic pricing when the final amount depends on the request.
 
-Endpoints are configured in the dashboard, so that is a description of the record rather than a request body. [MCP endpoints](/platform/mcp/endpoints) has every field.
+    With fixed pricing, configure the price directly on the operation. Mitu can present that amount to the agent and handle payment before your API is called to perform the paid work.
 
-Two fields decide whether an agent calls the right thing: `description` says what the operation does, and `when_to_use` says when to reach for it. A model sees those and the schemas, and nothing else.
+    With dynamic pricing, your API determines the amount based on the request before payment takes place. This is useful when the price depends on factors such as quantity, selected items, delivery, availability or other information known by your system.
 
-**Check before moving on:** the endpoint appears in your service's tool list with the price you expect.
+    The detailed quote flow and pricing behaviour are covered separately so you do not need to implement them from this guide.
 
-</Step>
+    Learn more about [Pricing](/platform/payments/pricing).
+  </Step>
 
-<Step title="Choose how it is priced">
+  <Step title="Make the paid operation available to agents">
+    Once the operation and its pricing are configured, make it available through your MCP connection. Compatible AI clients can discover the operation alongside the other capabilities you have chosen to make available.
 
-**Fixed** when every call costs the same. Set `price`, and Mitu answers the 402 itself. Your API is called once, already paid.
+    When an agent decides to use the paid operation, Mitu handles the payment requirement and lets the agent complete the payment using a supported method. Your API does not need to determine which agent payment protocol is being used or implement a separate payment flow for each one.
 
-**Dynamic** when the amount depends on the request. Mitu asks you for the price first, then calls again once it has been paid. Your API is called twice, and the two calls look almost identical.
+    Learn more about [Agent payments](/platform/payments/agent-payments).
+  </Step>
 
-The other models are on [endpoint types](/platform/payments/pricing). The rest of this guide covers fixed first, then what dynamic adds.
+  <Step title="Receive the paid request">
+    After payment is confirmed, Mitu sends the request to the API operation you configured. The request contains the information your endpoint needs to perform the work, together with payment context that identifies it as a paid request.
 
-</Step>
+    For example, if the agent paid to generate a company report, your `/reports` endpoint receives the request after payment and can generate the report using the same business logic your product already uses.
 
-<Step title="The agent calls, and gets a 402">
+    You do not need to create a separate fulfilment system for AI agents. Treat the agent as another client of the API you already operate, while Mitu handles the payment step before the paid request reaches your application.
 
-On a fixed-price endpoint, Mitu answers without touching your API:
+    Learn more about [Agent payments](/platform/payments/agent-payments).
+  </Step>
 
-```http
-HTTP/1.1 402 Payment Required
-Content-Type: application/problem+json
-```
+  <Step title="Verify the request">
+    Before processing a paid request, verify that it came through Mitu using the signing secret provided when you connected your API. This prevents your backend from trusting requests that reach the endpoint directly without going through the expected payment flow.
 
-```json
-{
-  "type": "https://paymentauth.org/problems/payment-required",
-  "status": 402,
-  "intent": "fixed",
-  "service":  { "id": "svc_...", "name": "Example Data" },
-  "endpoint": { "id": "ep_...",  "path": "/reports" },
-  "amount":   { "value": "0.050000", "currency": "USDC" },
-  "accepts": [
-    { "id": "chal_1", "method": "x402", "network": "base",
-      "asset": "USDC", "amount": "0.050000",
-      "recipient": "0x1DDb...", "nonce": "0x81e0..." },
-    { "id": "chal_2", "method": "mpp_crypto", "network": "tempo",
-      "asset": "USDC", "amount": "0.050000", "recipient": "0x1DDb..." },
-    { "id": "chal_3", "method": "mpp_spt", "amount": "0.050000",
-      "currency": "usdc", "networkId": "profile_..." }
-  ]
-}
-```
+    Request verification confirms that the request was sent through Mitu. It is separate from customer authentication, which determines which customer the agent may be acting for when your integration uses customer accounts.
 
-`intent` names the pricing model that produced the figure. `accepts` lists the challenges you accept, each carrying what its method needs. The response also sets `WWW-Authenticate`, one entry per challenge, for clients that read the header rather than the body.
+    After verification succeeds, your application can trust the payment context attached to the request and continue with the operation.
 
-<Warning title="402 is not an error">
-Nothing has failed at this point and nothing has been declined. The agent has been told what it must do to continue. An integration that logs a 402 as a failed payment will record a failure before every successful payment it takes.
-</Warning>
+    See [Request verification](/platform/security/request-verification) for the verification process and implementation examples.
+  </Step>
 
-[The 402 payment flow](/platform/payments/agent-payments) covers each field.
+  <Step title="Deliver the product or service">
+    Once the request has been verified, process it using the same business logic your application already uses. Create the order, generate the report, confirm the booking, provide the data or perform whatever action the paid operation represents.
 
-</Step>
+    Return your normal API response when the work is complete.
 
-<Step title="The agent pays">
+    ```json
+    {
+      "id": "rep_8841",
+      "status": "complete",
+      "company": "acme.com",
+      "sections": [
+        "overview",
+        "financials",
+        "competitors"
+      ]
+    }
+    ```
 
-The agent settles one challenge and calls again with the receipt.
+    Mitu returns the result to the AI agent so it can continue the task it was performing. Your response does not need a special agent-specific format unless that format is already part of your own API contract.
+  </Step>
 
-**x402** settles USDC on Base using EIP-3009 `transferWithAuthorization`. The payer signs an authorisation; Mitu broadcasts it and pays the gas, so the payer needs no ETH.
+  <Step title="Handle retries safely">
+    A paid request may be delivered again if an earlier delivery could not be confirmed. Operations that create orders, bookings or other side effects should therefore be handled idempotently so the same paid request does not produce the result twice.
 
-**`mpp_crypto`** does the same on Tempo. **`mpp_spt`** is a card-backed payment through a single-purpose token, for payers with no wallet.
+    Use the request identifier provided with the paid request to recognise requests you have already processed. If the same request is delivered again, return the result from the original operation instead of creating another order, booking or resource.
 
-You choose which to accept. Offering more than one costs nothing and widens who can pay you. [Payment methods](/platform/payments/agent-payments) covers all three.
+    Detailed request fields and retry behaviour are covered in [Agent payments](/platform/payments/agent-payments).
+  </Step>
 
-</Step>
+  <Step title="Track payments">
+    Configure webhooks so your backend can keep its own records updated when agent payments complete or fail. Payment events can be associated with your own records and used for reconciliation, reporting and customer support.
 
-<Step title="Quote the price (dynamic only)">
+    Webhooks are separate from the request your API receives to perform the paid operation. The request tells your application to fulfil the paid action, while payment events give your backend an independent record of payment activity.
 
-Skip this step on a fixed-price endpoint.
+    Learn more about [Webhooks](/platform/webhooks/overview) and [Events](/platform/webhooks/events).
+  </Step>
 
-Mitu calls your endpoint first with the agent's body and **no** `x-mitu-amount-charged`:
+  <Step title="Settle your funds">
+    Payments you receive from AI agents are added to your Mitu balance. Your business does not need to manage the agent's payment method or settlement protocol after receiving the payment.
 
-```http
-POST /reports
-Content-Type: application/json
-x-mitu-signature: t=1757601046,v1=9f3c4a...
-x-mitu-request-id: req_...
-x-mitu-agent-id: agent_...
-```
+    From your balance, you can settle funds to a supported bank account or withdraw them to an onchain address. This keeps the way an agent pays separate from how your business ultimately receives its money.
 
-Calculate the price and answer `402` with it. Do no work.
-
-```http
-HTTP/1.1 402 Payment Required
-Content-Type: application/json
-```
-
-```json
-{ "amount": "43.20", "currency": "USD" }
-```
-
-The contract is narrow, so it is worth being exact:
-
-<ParamField path="amount" type="string" required={true}>
-  The price. `price` is accepted as a synonym. It must match `^\d+(\.\d+)?$` and be greater than zero, so no currency symbol, no thousands separator, no negative and no exponent. `"43.20"` is valid; `"$43.20"`, `"43,20"` and `"0"` are not.
-</ParamField>
-
-<ParamField path="currency" type="string">
-  Falls back to the endpoint's configured currency, and then to `USD`.
-</ParamField>
-
-Two behaviours are worth knowing. If you answer anything other than `402`, Mitu relays your response to the agent as-is, which is how a dynamic endpoint can decide a particular request is free. And if you answer `402` with a body Mitu cannot read as a price, the agent gets `502 invalid-quote`, not your response.
-
-<Warning title="Do no work during the quote">
-The quote runs on every call, before any money moves. Creating the order, generating the report or reserving the stock here means doing it for nothing every time, and doing it twice when the paid leg arrives. The absence of `x-mitu-amount-charged` is the only signal, and it is sufficient.
-</Warning>
-
-</Step>
-
-<Step title="Receive the paid request">
-
-Once settlement is confirmed, Mitu calls your endpoint with the same body and the amount attached:
-
-```http
-POST /reports
-Content-Type: application/json
-x-mitu-signature: t=1757601046,v1=9f3c4a...b2d4
-x-mitu-request-id: req_5f13b916
-x-mitu-amount-charged: 43.200000
-x-mitu-agent-id: agent_...
-```
-
-| Header | Meaning |
-| --- | --- |
-| `x-mitu-signature` | Proof the request came from Mitu |
-| `x-mitu-request-id` | `req_...`, unique per call. Your idempotency key |
-| `x-mitu-amount-charged` | The amount that moved. Absent on a quote |
-| `x-mitu-customer-id` | `cus_...`, when the payer is a known Mitu customer |
-| `x-mitu-customer-ref` | Your own id for that customer, when applicable |
-| `x-mitu-agent-id` | Which agent made the call |
-| `authorization` | The customer's token, when you use OAuth sign-in |
-
-Not every header is on every request. An agent paying from its own funds is nobody's customer, so the customer headers are absent, and that is ordinary rather than a fault.
-
-</Step>
-
-<Step title="Verify before you do anything">
-
-```text
-x-mitu-signature: t=1757601046,v1=9f3c4a...b2d4
-```
-
-`v1` is:
-
-```text
-HMAC-SHA256(signing_secret, "{t}.{request_id}.{amount}.{raw_body}")
-```
-
-`amount` is the `x-mitu-amount-charged` header, or an **empty string** when that header is absent, which is what makes the same function work on both legs. `raw_body` is the exact bytes received.
-
-```js title="verify.js"
-const crypto = require('crypto')
-
-// Keep the raw body. express.json() throws it away.
-app.use(express.json({
-  verify: (req, _res, buf) => { req.rawBody = buf.toString('utf8') },
-}))
-
-function verify(req, secret) {
-  const header = req.get('x-mitu-signature') || ''
-  const parts = Object.fromEntries(
-    header.split(',').map((p) => p.split('=')),
-  )
-  const { t, v1 } = parts
-  if (!t || !v1) return false
-
-  // Reject anything older than five minutes, so a captured request
-  // cannot be replayed later.
-  if (Math.abs(Date.now() / 1000 - Number(t)) > 300) return false
-
-  const amount = req.get('x-mitu-amount-charged') ?? ''
-  const signed = `${t}.${req.get('x-mitu-request-id')}.${amount}.${req.rawBody}`
-  const expected = crypto.createHmac('sha256', secret)
-    .update(signed).digest('hex')
-
-  return crypto.timingSafeEqual(Buffer.from(v1), Buffer.from(expected))
-}
-```
-
-Verify before reading anything else. The customer id is a plain header and means nothing until the signature proves the request is Mitu's. [Request signature verification](/platform/security/request-verification) has the rules in full.
-
-**Check before moving on:** a request with a tampered body fails, and a replayed request older than five minutes fails.
-
-</Step>
-
-<Step title="Do the work, and do it once">
-
-```js
-const amount = req.get('x-mitu-amount-charged')
-
-// Quote leg. Price it and return, without touching anything.
-if (!amount) {
-  return res.status(402).json({ amount: priceFor(req.body), currency: 'USD' })
-}
-
-if (!verify(req, MITU_SIGNING_SECRET)) return res.sendStatus(401)
-
-// Already served? Return what was created the first time.
-const seen = await findByRequestId(req.get('x-mitu-request-id'))
-if (seen) return res.json(seen.result)
-
-const result = await doTheWork(req.body)
-await save(req.get('x-mitu-request-id'), result)   // same transaction
-return res.json(result)
-```
-
-A delivery can be retried, and the signature stays valid for its lifetime, so deduplicating on `x-mitu-request-id` is the only thing stopping one payment being served twice. Write the mapping in the same transaction that creates the resource: writing the order first and the mapping afterwards leaves a window where a retry arriving between the two creates a duplicate, which is the failure the check exists to prevent.
-
-</Step>
-
-<Step title="Return the result">
-
-Answer exactly as your API always has. Mitu passes your response back to the agent through the call it started.
-
-```json
-{
-  "id": "rep_8841",
-  "status": "complete",
-  "company": "acme.com",
-  "sections": ["overview", "financials", "competitors"]
-}
-```
-
-The response schema is yours. Mitu prescribes none.
-
-Answer a non-2xx and the agent is told the delivery failed, while the payment stands. See the last step.
-
-</Step>
-
-<Step title="Confirm a payment out of band">
-
-Signature verification is the primary mechanism and is enough on its own. This endpoint is a second, independent check, useful when reconciling or debugging:
-
-```bash
-curl --request GET \
-  --url https://api.mitu.ai/v1/proxy-requests/req_5f13b916 \
-  --header "x-api-key: $MITU_API_KEY"
-```
-
-```json
-{
-  "request_id": "req_5f13b916",
-  "service_id": "svc_dhydwg80dzb4vy6xjl2m",
-  "paid": true,
-  "amount": "43.200000",
-  "currency": "USDC",
-  "method": "POST",
-  "path": "/reports",
-  "payment_method": "x402",
-  "wallet_transaction_id": "f5533e85-16d8-4f58-ba22-86dba59c6a15",
-  "created_at": "2026-09-11T15:01:32.760Z"
-}
-```
-
-`paid` is true when an amount was actually taken. It is scoped to your own account, so you can only look up requests against your own services.
-
-This is the x402 shape deliberately: rather than asserting that payment happened, Mitu exposes something you can call and authenticate yourself. `wallet_transaction_id` names the settlement, which you can check on chain, and that is a stronger position than trusting either a header or this endpoint.
-
-</Step>
-
-<Step title="Track completion and failure">
-
-`payment.completed` fires when you are paid, carrying the endpoint, the amount, the method, the settlement `tx_hash`, your `reference` and `delivered`.
-
-`payment.failed` fires when a payment was attempted and did not complete, with a `reason` of `no_supported_method`, `insufficient_balance`, `over_limit`, `settlement_failed` or `upstream_rejected`. These call for different responses: `no_supported_method` usually means the methods on your endpoint are too narrow for the agents reaching you, while `settlement_failed` is worth retrying.
-
-Do not make the dashboard your only source of payment state. [Webhooks](/platform/webhooks/overview) covers delivery and retries, and [events](/platform/webhooks/events) the payloads.
-
-</Step>
-
-<Step title="Handle paid but not delivered">
-
-Settlement happens before your endpoint is called, and it is final. If your endpoint then refuses, you have been paid and the agent has nothing.
-
-```json
-{ "delivered": false, "failure_status": 401 }
-```
-
-`failure_status` is the status you answered with, and it usually names the cause. A `401` almost always means your signing secret and Mitu's no longer match, or the body was re-serialised before verifying. A `500` is your own code. A `404` means the registered path is no longer served.
-
-Nothing downstream reverses an on-chain settlement. Treat it as money owed: fulfil the work, deliver later, or refund. [Paid but not delivered](/platform/payments/agent-payments) covers it.
-
-</Step>
-
+    Learn more about [Settlement](/platform/payments/settlement).
+  </Step>
 </Steps>
 
-## A fixed-price call, end to end
+## Fixed and dynamic pricing
 
-<Steps>
+Most integrations only need to decide whether an operation has a known price or whether your system needs to calculate the price for each request.
 
-<Step title="Configured">
-One endpoint, priced once.
+With **fixed pricing**, you configure the amount on the operation and Mitu handles the payment before sending the paid request to your API. Your backend only needs to verify the request, perform the work and return the result.
 
-```yaml
-name: company_profile
-method: GET
-path: /companies/{domain}
-pricing_type: fixed
-price: 0.05
-accepts: [x402, mpp_spt]
-```
-</Step>
+With **dynamic pricing**, your API calculates the amount from the request before the agent pays. Once that amount has been paid, your API receives the request again to perform the actual work. Keep price calculation separate from fulfilment so the product, order or booking is only created after payment.
 
-<Step title="The agent calls it">
-Mitu answers the requirement itself. Your API has not been touched.
+See [Pricing](/platform/payments/pricing) for the complete dynamic pricing flow.
 
-```json
-{
-  "status": 402,
-  "intent": "fixed",
-  "amount": { "value": "0.050000", "currency": "USDC" },
-  "accepts": [ { "method": "x402" }, { "method": "mpp_spt" } ]
-}
-```
-</Step>
+## Payment and delivery are separate outcomes
 
-<Step title="The agent settles">
-It signs the x402 authorisation. Mitu broadcasts the transaction and pays the gas, so the payer needs no ETH.
-</Step>
+Payment is confirmed before your API performs the paid operation. This means your application should treat payment and successful delivery as separate outcomes.
 
-<Step title="Mitu calls you">
-Once, and already paid.
+If your API cannot complete the operation after payment, do not ask the agent to make the same payment again. Handle the existing paid request appropriately by completing the work later, resolving the failure or refunding the customer where necessary.
 
-```http
-GET /companies/acme.com
-x-mitu-signature: t=1757601046,v1=9f3c4a...b2d4
-x-mitu-request-id: req_5f13b916
-x-mitu-amount-charged: 0.050000
-```
-</Step>
+Design paid operations so fulfilment is reliable and retries are safe. Learn more about these cases in [Agent payments](/platform/payments/agent-payments).
 
-<Step title="You verify and answer">
-Check the signature, check you have not already served `req_5f13b916`, look the company up, and reply 200 with your usual body.
+## Your API can now accept agent payments
 
-```json
-{
-  "name": "Acme",
-  "domain": "acme.com",
-  "industry": "Technology",
-  "employees": 240
-}
-```
-</Step>
+AI agents can now pay before using the operations you configured, without your backend implementing agent payment protocols directly. Mitu handles the payment flow, confirms payment and sends the paid request to your existing API.
 
-<Step title="The agent has its answer">
-And your webhook confirms the money.
+Your application remains responsible for the product or service being delivered. Verify the request, perform the work using your existing business logic and return the normal result. The payment is added to your Mitu balance and can then be settled to your bank account or onchain address.
 
-```json
-{ "event": "payment.completed", "event_data": { "delivered": true } }
-```
-</Step>
-
-</Steps>
-
-## A dynamic call, end to end
-
-<Steps>
-
-<Step title="Configured">
-Same idea, but you set the price per call.
-
-```yaml
-name: create_order
-method: POST
-path: /orders
-pricing_type: dynamic
-```
-</Step>
-
-<Step title="The agent calls it">
-Mitu forwards the agent's body to you with **no** amount header, which is what makes this leg a quote.
-
-```http
-POST /orders
-x-mitu-signature: t=1757601046,v1=9f3c4a...
-x-mitu-request-id: req_5f13b916
-```
-
-```json
-{
-  "items": [
-    { "id": "wrap_chicken", "quantity": 2 },
-    { "id": "water_500ml", "quantity": 1 }
-  ],
-  "delivery_address_id": "addr_8841"
-}
-```
-</Step>
-
-<Step title="You quote">
-Items \$35.00, delivery \$5.00, tax \$3.20. Answer 402 with the total and create nothing.
-
-```json
-{ "amount": "43.20", "currency": "USD" }
-```
-</Step>
-
-<Step title="Mitu builds the requirement">
-From your price, marked `intent: "dynamic"`, and hands it to the agent.
-
-```json
-{
-  "status": 402,
-  "intent": "dynamic",
-  "amount": { "value": "43.20", "currency": "USD" }
-}
-```
-</Step>
-
-<Step title="The agent pays">
-Mitu calls you again with the same body, now carrying the amount.
-
-```http
-POST /orders
-x-mitu-signature: t=1757601312,v1=6b21de...
-x-mitu-request-id: req_5f13b916
-x-mitu-amount-charged: 43.200000
-```
-</Step>
-
-<Step title="You verify, deduplicate, and create the order">
-Write the mapping in the same transaction that creates the order, so a retry cannot produce a second one.
-
-```text
-req_5f13b916 -> order_8841
-```
-</Step>
-
-<Step title="You return the confirmation">
-Your usual response. The agent tells the customer their order is in.
-
-```json
-{
-  "id": "order_8841",
-  "status": "confirmed",
-  "total": 43.20,
-  "estimated_delivery": "35-45 minutes"
-}
-```
-</Step>
-
-</Steps>
-
-## Common mistakes
-
-<AccordionGroup>
-
-<Accordion title="Treating 402 as an error">
-It is the payment requirement. Nothing has been attempted, and every successful agent payment begins with one.
-</Accordion>
-
-<Accordion title="Doing the work during the dynamic quote">
-The quote leg runs before any money moves, on every call. Work done there is done for free, and repeated when the paid leg arrives. Branch on the presence of `x-mitu-amount-charged` and nothing else.
-</Accordion>
-
-<Accordion title="Trusting the customer headers before verifying">
-`x-mitu-customer-id` and `x-mitu-customer-ref` are plain headers that anybody who has found your URL can send. They mean nothing until the signature proves the request came from Mitu. Verify first, then read identity.
-</Accordion>
-
-<Accordion title="Re-serialising the body before verifying">
-The signature covers the exact bytes received. Parsing JSON and re-encoding it changes key order and whitespace, and the comparison fails. This is the most common cause of a `401` on a paid request, and it presents as a signing-secret problem when it is not one.
-</Accordion>
-
-<Accordion title="Not checking the timestamp">
-Mitu stamps `t` but only you can enforce it. Without a window, a request captured once works forever.
-</Accordion>
-
-<Accordion title="Not deduplicating on the request id">
-A delivery can be retried and the signature is still valid, so nothing else stops the same paid request being served twice. On an endpoint with side effects that means two orders for one payment.
-</Accordion>
-
-<Accordion title="Assuming payment means delivery succeeded">
-You are paid before your endpoint is called. `delivered: false` is the case where the money moved and the agent got nothing, and it needs a fulfilment path rather than a log line.
-</Accordion>
-
-<Accordion title="Putting a merchant key in an agent or client">
-`sk_live_...` creates customers, wallets and payment links. Nothing in this flow requires an agent to hold one. The agent authenticates with its own payment credential, not with yours.
-</Accordion>
-
-</AccordionGroup>
-
-## Next steps
+## Continue building
 
 <CardGroup cols={2}>
-  <Card title="Sell your API to AI agents" icon="regular rocket" href="/guides/use-cases/api-monetisation">
-    The same journey as a use case, with the product context.
+  <Card title="Agent payments" icon="regular credit-card" href="/platform/payments/agent-payments">
+    Understand how agent payments are handled before a paid request reaches your API.
   </Card>
-  <Card title="MCP endpoints" icon="regular list-check" href="/platform/mcp/endpoints">
-    Every field on an endpoint, and how it reaches the model.
+
+  <Card title="Pricing" icon="regular calculator" href="/platform/payments/pricing">
+    Configure fixed and dynamic pricing for paid operations.
   </Card>
-  <Card title="Dynamic pricing" icon="regular calculator" href="/platform/payments/pricing">
-    The two legs, in depth.
+
+  <Card title="Request verification" icon="regular shield-check" href="/platform/security/request-verification">
+    Verify requests from Mitu before processing paid operations.
   </Card>
-  <Card title="Verify requests" icon="regular shield-check" href="/platform/security/request-verification">
-    The algorithm and the five rules.
+
+  <Card title="Settlement" icon="regular building-columns" href="/platform/payments/settlement">
+    Settle the funds you receive to a bank account or onchain address.
   </Card>
 </CardGroup>

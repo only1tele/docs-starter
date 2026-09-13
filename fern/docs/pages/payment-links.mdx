@@ -1,24 +1,21 @@
 ---
 title: Payment experiences
-subtitle: "One payment obligation with two ways in: a checkout page a person opens, and a 402-protected URL an agent pays."
+subtitle: Create payments that can be completed by people or AI agents through the experience designed for each payer.
 ---
 
-A payment link is a charge you create once. Who pays it, and how, is decided afterwards.
+A payment experience represents something your business wants to collect payment for. Create it once and provide the appropriate payment URL depending on who will complete it.
 
-```text
-https://mitu.ai/pay/pay_abc123       a person opens this and sees a checkout
-https://api.mitu.ai/pay/pay_abc123   an agent calls this and gets a 402
-```
-
-The two are genuinely different hosts serving different things. The checkout is a page from the web app; the agent URL answers a payment requirement from the API. Handing an agent the checkout URL gets it HTML instead of a challenge.
+People can open a hosted checkout, while AI agents can use a programmatic payment URL. Both entry points represent the same payment, so the amount, reference and resulting payment state remain consistent regardless of how it is completed.
 
 <Note title="No MCP required">
-A payment link stands on its own. You do not need to expose an API through MCP to create one, and the payer does not need a Mitu Agent Wallet.
+  Payment experiences work independently of MCP. You do not need to connect an API to create one, and an AI agent does not need a Mitu Agent Wallet to complete a payment.
 </Note>
 
-## Creating one
+## Create a payment
 
-```bash title="Create a payment link"
+For a one-time payment, create a payment link with `type` set to `charge`.
+
+```bash title="Create a payment"
 curl --request POST \
   --url https://api.mitu.ai/v1/payment-links \
   --header "x-api-key: $MITU_API_KEY" \
@@ -27,106 +24,153 @@ curl --request POST \
     "type": "charge",
     "amount": 25.00,
     "currency": "USD",
-    "description": "Invoice 8841",
+    "description": "Order 8841",
     "reference": "ORDER-8841",
     "expiresAt": "2026-10-01T00:00:00Z",
     "paymentMethods": ["x402", "mpp_spt"],
-    "metadata": { "order_id": "8841" }
+    "metadata": {
+      "order_id": "8841"
+    }
   }'
 ```
 
-<ParamField path="type" type="charge | subscription | session | per_request" default="charge">
-  Which payment lifecycle this link has. See [types](#types) below.
-</ParamField>
+### Parameters
 
-<ParamField path="amount" type="number" required={true}>
-  Required for `charge` and `per_request`. A `session` link uses `sessionMaxDeposit` instead, and a `subscription` link takes the amount from its plan.
-</ParamField>
+| Parameter | Type | Description |
+| --- | --- | --- |
+| `type` | `charge` \| `subscription` \| `session` \| `per_request` | Determines the payment lifecycle. The default is `charge`. See [Payment types](#payment-types) for when to use each type. |
+| `amount` | `number` | The amount to collect. Required for `charge` and `per_request`. Sessions use `sessionMaxDeposit`, while subscriptions take their amount from the associated plan. |
+| `currency` | `string` | The currency for the payment. Required except for subscriptions, where the currency comes from the associated plan. |
+| `description` | `string` | A description of what the payer is paying for. This can be shown as part of the payment experience. |
+| `reference` | `string` | Your own identifier for the payment, such as `ORDER-8841` or `BOOKING-9832`. The reference is returned with payment events so you can reconcile the payment against a record your system already knows. |
+| `expiresAt` | `string` | The time after which the payment can no longer be completed, provided as an ISO 8601 timestamp. |
+| `paymentMethods` | `array` | The agent payment methods available for this payment. Supported values can include `x402`, `mpp_crypto` and `mpp_spt`. See [Agent payments](/platform/payments/agent-payments). |
+| `metadata` | `object` | Additional information you want associated with the payment and returned with it. Do not use metadata to store secrets or sensitive credentials. |
+| `planId` | `string` | Used with `subscription` payments to identify the subscription plan. Use `planIds` with `allowCustomerChoice` when the payer can choose between multiple plans. |
+| `sessionMaxDeposit` | `number` | Used with `session` payments to set the maximum amount the payer can fund for the session. A session can also have a `sessionExpiresAt`. |
+| `endpointPattern` | `string` | Used with `per_request` payments to identify the API path the payment applies to. |
 
-<ParamField path="currency" type="string" required={true}>
-  Required except on a `subscription` link, where it comes from the plan.
-</ParamField>
+## Payment URLs
 
-<ParamField path="description" type="string">
-  Shown to the payer on the checkout page.
-</ParamField>
+Creating a payment returns separate URLs for human and agent payers.
 
-<ParamField path="reference" type="string">
-  Your own identifier, such as `ORDER-8841`. Returned on the payment event, which is what makes reconciliation possible without storing Mitu's id.
-</ParamField>
-
-<ParamField path="expiresAt" type="string">
-  ISO 8601. After it the link stops accepting payment.
-</ParamField>
-
-<ParamField path="paymentMethods" type="array">
-  Any of `x402`, `mpp_crypto`, `mpp_spt`. These constrain the agent path. See [payment methods](/platform/payments/agent-payments).
-</ParamField>
-
-<ParamField path="metadata" type="object">
-  Free-form values returned intact. Not a place for secrets.
-</ParamField>
-
-<ParamField path="planId" type="string">
-  `subscription` only. Use `planIds` with `allowCustomerChoice` to offer several plans.
-</ParamField>
-
-<ParamField path="sessionMaxDeposit" type="number">
-  `session` only, with optional `sessionExpiresAt`.
-</ParamField>
-
-<ParamField path="endpointPattern" type="string">
-  `per_request` only. The path pattern calls are priced against.
-</ParamField>
-
-The response carries `checkoutUrl`. The agent URL is the same id on the API origin, and both are sent together on the `link.created` event:
-
-```json title="link.created"
-"url": {
-  "checkout": "https://mitu.ai/pay/pay_n8d7piu1yc6h",
-  "agent": "https://api.mitu.ai/pay/pay_n8d7piu1yc6h"
+```json
+{
+  "id": "pay_n8d7piu1yc6h",
+  "type": "charge",
+  "amount": "25.00",
+  "currency": "USD",
+  "reference": "ORDER-8841",
+  "url": {
+    "checkout": "https://mitu.ai/pay/pay_n8d7piu1yc6h",
+    "agent": "https://api.mitu.ai/pay/pay_n8d7piu1yc6h"
+  }
 }
 ```
 
-{/* SCREENSHOT: docs/assets/platform/payments/create-link.png
-     Caption: "Create a payment request once and make it available to both
-     kinds of payer." */}
+Use `url.checkout` when a person should complete the payment and `url.agent` when an AI agent should complete it programmatically. Do not interchange them. The checkout URL serves a human payment experience, while the agent URL participates in the agent payment flow.
 
-## The human path
+Both URLs belong to the same payment. You do not need to create a second payment if the payer changes from a person to an AI agent or vice versa.
 
-The payer opens the checkout URL, sees who is charging them, what for, how much, and the methods available to them, and pays. `link.viewed` fires when the page is opened.
+## Human payments
 
-{/* SCREENSHOT: docs/assets/platform/payments/human-checkout.png
-     Caption: "A person opens the checkout URL and pays." Use the real
-     checkout, not a mock-up. */}
+Send `url.checkout` through the channel where your customer is already interacting with your business, such as your website, email, SMS or WhatsApp. The customer opens the hosted checkout, reviews what they are paying for and completes the payment using an available payment method.
 
-## The agent path
+Your application does not need to build a separate checkout experience to collect the payment. Track the resulting payment through the API and verified webhook events rather than relying on the state shown in the customer's browser.
 
-```text
-GET  https://api.mitu.ai/pay/pay_abc123   answers 402 with the challenges
-POST https://api.mitu.ai/pay/pay_abc123   takes the signed credential
+## Agent payments
+
+Give `url.agent` to an AI agent when the payment should be completed programmatically. The agent receives the payment requirement and completes it using one of the supported methods available for that payment.
+
+Mitu handles the underlying agent payment flow. Your application does not need to implement x402 or MPP simply because an AI agent may complete the payment.
+
+See [Agent payments](/platform/payments/agent-payments) for the payment flow and supported methods.
+
+## Payment types
+
+### Charge
+
+Use `charge` for a one-time payment where the amount is already known. This works well for orders, bookings, deposits, service fees and other transactions that should be paid once.
+
+```json
+{
+  "type": "charge",
+  "amount": 25.00,
+  "currency": "USD",
+  "reference": "ORDER-8841"
+}
 ```
 
-The 402 body is the same payment requirement used everywhere else on the platform, listing the methods you accepted on the link. [The 402 payment flow](/platform/payments/agent-payments) covers every field, and [payment methods](/platform/payments/agent-payments) covers what an agent can settle with.
+### Subscription
 
-## Types
+Use `subscription` when the payer is subscribing to a recurring plan. The amount and currency come from the associated subscription plan rather than being configured directly on the payment.
 
-<ParamField path="charge" type="">
-  One amount, paid once. Invoices, deposits, service payments, anything where the figure is already known.
-</ParamField>
+Use `planId` for a specific plan, or allow the payer to choose from multiple plans where supported.
 
-<ParamField path="subscription" type="">
-  Attaches to a plan and recurs. See [subscriptions](/platform/payments/subscriptions).
-</ParamField>
+See [Subscriptions](/platform/payments/subscriptions) for plans, billing intervals and subscription lifecycle.
 
-<ParamField path="session" type="">
-  The payer funds a balance up front and draws it down across many calls. `session.opened` carries the deposit and the on-chain channel; `session.closed` carries what was spent and what was refunded.
-</ParamField>
+### Session
 
-<ParamField path="per_request" type="">
-  Prices calls against a path pattern. If you are charging per API call, [selling your API to agents](/guides/use-cases/api-monetisation) is the fuller treatment.
-</ParamField>
+Use `session` when the payer should fund an amount that can be used across an ongoing interaction rather than completing a separate payment for every action.
 
-## Reconciling
+Configure the maximum amount that can be funded using `sessionMaxDeposit` and optionally set when the session expires. This model works well for longer or metered interactions where multiple paid actions happen as part of the same session.
 
-Set `reference` to your own identifier and read it back off `payment.completed`. Do not build reconciliation around Mitu's id alone, and do not mark anything paid from the payer's browser: use the verified webhook. [Events](/platform/webhooks/events) has the payloads.
+### Per request
+
+Use `per_request` when payment is associated with calls to an API path. Configure the relevant path using `endpointPattern`.
+
+This is useful when payment is tied directly to API usage rather than a standalone order or checkout. If your main goal is charging AI agents for API calls, see [Sell your API to AI agents](/guides/use-cases/api-monetisation).
+
+## Reconcile payments
+
+Set `reference` to an identifier your own system already understands. When the payment completes, use that reference to associate the payment with the corresponding order, booking, invoice or other business record.
+
+For example:
+
+```text
+ORDER-8841
+BOOKING-9832
+INV-2026-441
+```
+
+Do not rely on a browser redirect or an AI client's response to decide that a payment has completed. Use a verified payment event or retrieve the current payment state through the API.
+
+Keeping your own reference on the payment also means your reconciliation does not depend entirely on storing and looking up Mitu's payment identifier.
+
+See [Webhooks](/platform/webhooks/overview) and [Events](/platform/webhooks/events) for handling payment events.
+
+## Payment experiences and fulfilment
+
+A completed payment tells you that money was received. It does not necessarily mean the underlying order, booking, service or other business action has been fulfilled.
+
+Keep payment state and fulfilment state separate in your system. After payment completes, use your reference to determine what the payment belongs to and continue the appropriate business workflow.
+
+For paid API operations where payment happens before your API is called, see [Agent payments](/platform/payments/agent-payments).
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="Agent payments" icon="regular credit-card" href="/platform/payments/agent-payments">
+    Understand how AI agents complete payments programmatically.
+  </Card>
+
+  <Card title="Invoices" icon="regular file-invoice" href="/platform/payments/invoices">
+    Create formal billing with line items and due dates.
+  </Card>
+
+  <Card title="Subscriptions" icon="regular arrows-rotate" href="/platform/payments/subscriptions">
+    Create recurring payment experiences.
+  </Card>
+
+  <Card title="Webhooks" icon="regular bell" href="/platform/webhooks/overview">
+    Keep your application updated when payment state changes.
+  </Card>
+
+  <Card title="Accept payments from humans and AI agents" icon="regular users" href="/guides/use-cases/universal-payments">
+    Use the same payment across human and agent payer experiences.
+  </Card>
+
+  <Card title="Settlement" icon="regular building-columns" href="/platform/payments/settlement">
+    Settle the funds you receive to a bank account or onchain address.
+  </Card>
+</CardGroup>

@@ -1,445 +1,205 @@
 ---
 title: Connect your product to AI agents
-subtitle: Make your existing products, services and APIs available to AI agents through MCP, keeping your backend, your customer accounts and your business logic.
+subtitle: Make your existing products, services and APIs available to AI agents through MCP, while keeping your existing backend and customer accounts.
 ---
 
-Your application is one way customers use your product. An AI agent becomes another. Mitu sits in front of the API you already run and turns the operations you choose into tools that compatible AI clients can discover and call.
+Your application is one way customers use your product. An AI agent can become another. Connect the API that already powers your product to Mitu, choose the operations you want AI agents to use and make those operations available as tools through MCP.
 
-```text
-Your existing API
-        |
-Connect it to Mitu
-        |
-Choose the operations agents can use
-        |
-Describe each one as a tool, with schemas
-        |
-Mitu serves them over MCP
-        |
-A customer connects from an AI client
-        |
-The agent calls a tool
-        |
-Mitu calls your API
-        |
-Your API answers exactly as it always has
-```
+You do not need to rebuild your product for AI agents or create a separate agent-facing API. Your existing backend remains responsible for your data, business logic and customer accounts, while Mitu provides the MCP layer that lets compatible AI clients discover and use the capabilities you make available.
 
-This is about adding a channel, not building an agent. Nothing here requires payments or wallets: an entirely free integration is a valid one.
-
-<Note title="Connecting the base URL does not expose your API">
-Only the operations you register become tools. The rest of what lives behind that base URL stays where it is.
+<Note title="Connecting your API does not make every operation available">
+  You choose which operations become tools for AI agents. Connecting your base URL does not automatically make the rest of your API available through MCP.
 </Note>
-
-## What you will build
-
-1. Your API connected, reachable, and signing verified.
-2. The operations you want agents to use, registered as tools.
-3. Request and response schemas an agent can act on.
-4. A decision on which operations need a signed-in customer.
-5. A customer connected from an AI client.
-6. The agent discovering and calling a tool.
-7. Your backend receiving the call and answering normally.
 
 ## Before you begin
 
-You need a Mitu merchant account, an HTTPS API that Mitu can reach, and at least one operation worth exposing.
+You need a Mitu account, an HTTPS API that Mitu can reach and at least one operation you want AI agents to use. Your existing API can continue serving your website, application and other clients alongside AI agents.
 
 <Steps toc={true}>
+  <Step title="Connect your existing API">
+    Start by connecting the API that already powers your product. In the dashboard, open your MCP configuration and provide the base URL that Mitu should use when calling your API.
 
-<Step title="Connect your API">
+    ```text
+    https://api.example.com
+    ```
 
-In the dashboard, set the base URL Mitu forwards to, and the health-check path if you have one.
+    You do not need to create separate endpoints for AI agents. The same API that serves your existing application can also handle requests initiated through MCP.
 
-```text
-API base URL        https://api.example.com
-Health check path   /healthz
-```
+    When you connect your API, Mitu provides a signing secret that your backend uses to verify requests sent by Mitu. Keep this secret secure and use it only from your server.
 
-**Mitu holds no credential for your API.** Authenticity runs the other way: Mitu signs every forwarded request with a secret it issues you, shown on the Integration page as `mps_...`, and your backend verifies it.
+    Learn more about [Request verification](/platform/security/request-verification).
+  </Step>
 
-```text
-sk_live_... / sk_test_...   your merchant key, for Mitu's own API
-mps_...                     signs requests Mitu makes TO your API
-whsec_...                   signs webhook deliveries Mitu sends you
-mcpk_...                    one customer's key for reaching your MCP
-```
+  <Step title="Choose the operations agents can use">
+    Select the parts of your product that are useful to an AI agent rather than making every API operation available. A booking product, for example, might let agents find locations, check availability, create bookings and retrieve existing bookings.
 
-Requests are forwarded with a **30 second** timeout.
+    ```text
+    GET  /locations
+    GET  /availability
+    POST /bookings
+    GET  /bookings/{id}
+    ```
 
-**Check before moving on:** the base URL is saved, the health check passes, and your backend holds the signing secret.
+    Each operation becomes a tool the AI client can discover and call. You define the tool name, description, when it should be used and the request and response schemas that describe the operation.
 
-</Step>
+    For example:
 
-<Step title="Add the operations agents can use">
+    ```yaml
+    name: create_booking
+    method: POST
+    path: /bookings
+    description: Creates a booking at a location for a given date, time and party size
+    when_to_use: Use after the customer has confirmed the location, date, time and party size
+    requires_auth: true
+    pricing_type: free
+    ```
 
-Register the operations that are meaningful to an agent, not everything you serve. A tool list containing things an agent should never call makes it more likely that it calls one.
+    Start with the operations that represent useful actions in your product. A smaller set of clearly defined tools is easier for an AI agent to understand and use correctly than a large collection of operations with overlapping purposes.
 
-A booking product might expose four of its operations:
+    Learn more about [MCP endpoints](/platform/mcp/endpoints).
+  </Step>
 
-```text
-GET  /locations        list_locations
-GET  /availability     check_availability
-POST /bookings         create_booking
-GET  /bookings/{id}    get_booking
-```
+  <Step title="Describe each tool clearly">
+    The tool definition tells the AI agent what an operation does, when it should use it and what information it needs to provide. Use names that describe the action clearly and descriptions that explain the result the operation produces.
 
-Each record carries the routing, the text the model reads, and the schemas:
+    For example, `create_booking` is more useful when its description explains that it creates a booking for a specific location, date, time and party size. Its `when_to_use` can then tell the agent that the customer should already have confirmed those details before the operation is called.
 
-```yaml
-name: create_booking
-method: POST
-path: /bookings
-description: Creates a booking at a location for a given date, time and party size
-when_to_use: Use after the customer has confirmed the location, date, time and party size
-input_schema: { }
-output_schema: { }
-requires_auth: true
-pricing_type: free
-rate_limit_per_minute: 60
-is_public: true
-```
+    Your input schema should match what your API actually accepts. Use clear field names, mark genuinely required values as required and use enums where only a fixed set of values is valid. The response schema should describe the information your API returns so the agent can use that result in the next part of the customer's task.
 
-`is_public: false` keeps an endpoint out of the tool list while leaving it callable, which is how you stage something before announcing it.
-
-{/* SCREENSHOT: docs/assets/integration-guides/connect/add-operation.png
-     Caption: "Register an operation and describe when an agent should use
-     it." Show name, method, path, description and pricing. */}
-
-[MCP endpoints](/platform/mcp/endpoints) has every field.
-
-</Step>
-
-<Step title="Write the description and when_to_use">
-
-A model sees `name`, `description`, `when_to_use` and the schemas. Nothing else. These four fields are the entire basis on which it decides.
-
-```text
-Poor      create_booking
-          Creates booking
-
-Better    create_booking
-          Creates a booking at a location for a given date, time and party size
-          Use after the customer has confirmed the location, date, time and party size
-```
-
-Name tools for the action, in the `verb_noun` form models are used to. Describe what the operation does to what, and for whom. Then say in `when_to_use` what must already be true before the call makes sense, which is what stops a model reaching for the wrong tool when two look similar.
-
-</Step>
-
-<Step title="Define the request schema">
-
-The input schema becomes the tool's arguments. The more precise it is, the fewer malformed calls reach your API.
-
-```json title="input_schema"
-{
-  "type": "object",
-  "properties": {
-    "location_id": {
-      "type": "string",
-      "description": "Location identifier from list_locations"
-    },
-    "date": {
-      "type": "string",
-      "format": "date",
-      "description": "Booking date, YYYY-MM-DD"
-    },
-    "time": {
-      "type": "string",
-      "description": "24-hour local time, HH:MM"
-    },
-    "party_size": {
-      "type": "integer",
-      "minimum": 1,
-      "maximum": 12,
-      "description": "Number of people"
-    },
-    "seating": {
-      "type": "string",
-      "enum": ["indoor", "outdoor", "bar"]
+    ```json title="input_schema"
+    {
+      "type": "object",
+      "properties": {
+        "location_id": {
+          "type": "string",
+          "description": "Location identifier"
+        },
+        "date": {
+          "type": "string",
+          "format": "date"
+        },
+        "time": {
+          "type": "string",
+          "description": "24-hour local time, HH:MM"
+        },
+        "party_size": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "required": ["location_id", "date", "time", "party_size"]
     }
-  },
-  "required": ["location_id", "date", "time", "party_size"]
-}
-```
+    ```
 
-Four things earn their keep here:
+    Keep these schemas aligned with the validation rules already used by your backend. The goal is to describe your existing API accurately rather than create a second contract specifically for agents.
 
-- **Field names the model can reason about.** `location_id` beats `lid`.
-- **A description on every field**, especially where a value comes from another tool. "Identifier from `list_locations`" tells the model to call that first.
-- **`required` that matches reality.** Marking an optional field required makes the model invent values for it.
-- **Enums wherever the set is closed.** An enum removes a whole class of guessing.
+    Learn more about [Tool schemas](/platform/mcp/tool-schemas).
+  </Step>
 
-Keep the schema aligned with what your API actually validates. A schema looser than your API produces calls your API rejects; one tighter than your API hides capability.
+  <Step title="Import your OpenAPI document">
+    If you already maintain an OpenAPI document, you can import it instead of configuring every operation manually. Mitu can use the document to create the corresponding operations and schemas, which you can then review before making them available to AI agents.
 
-</Step>
+    Review the generated names and descriptions after importing. Documentation written for developers does not always give an AI agent enough context to decide when one operation should be used instead of another.
 
-<Step title="Define the response schema">
+    Learn more about [OpenAPI import](/platform/mcp/open-api-import).
+  </Step>
 
-The output schema tells the agent what it is getting back, so it can use the result rather than guess at it.
+  <Step title="Choose how customers connect">
+    Decide which operations require a signed-in customer and how Mitu should identify that customer. Public operations such as product catalogues, menus or general availability can remain available without customer authentication, while account-specific operations can require it.
 
-```json title="output_schema"
-{
-  "type": "object",
-  "properties": {
-    "id": { "type": "string", "description": "Booking reference" },
-    "status": { "type": "string", "enum": ["confirmed", "waitlisted"] },
-    "location_id": { "type": "string" },
-    "date": { "type": "string", "format": "date" },
-    "time": { "type": "string" },
-    "party_size": { "type": "integer" }
-  },
-  "required": ["id", "status"]
-}
-```
+    Customers can connect using a customer key or your existing OAuth sign in flow. With a customer key, you provide the customer with their `mcpk_...` credential. With OAuth, the customer signs in using the account they already have with your product.
 
-This matters more than it looks. An agent that knows `id` is the booking reference can quote it back to the customer and pass it to `get_booking` later. One that does not has to infer which field mattered from a wall of JSON, and will sometimes pick wrong.
+    When OAuth is used, the signed-in customer's access token can be forwarded with requests to your API so your existing authorisation, account and entitlement rules continue to apply.
 
-</Step>
+    <Note title="Customer authentication is separate from Agent Wallets">
+      Connecting a customer through MCP does not automatically give them an Agent Wallet. Wallets are a separate capability that you can issue when you want a customer's AI agent to be able to make payments on their behalf.
+    </Note>
 
-<Step title="Or import an OpenAPI document">
+    Learn more in [Connect customer accounts](/guides/integration-guides/connect-customer-accounts) and [MCP authentication](/platform/mcp/authentication).
+  </Step>
 
-If you already maintain one, import it instead of adding operations by hand. Mitu parses the document and creates one endpoint per operation with the schemas attached, which you can then edit.
+  <Step title="Connect from an AI client">
+    Once your tools are configured, customers can add your MCP connection to a compatible AI client such as ChatGPT, Claude, Claude Code, Cursor, Windsurf or another client that supports MCP.
 
-The descriptions and `when_to_use` are still worth a pass afterwards. An OpenAPI `summary` is written for a developer reading a reference; `when_to_use` is written for a model choosing between tools, and they are rarely the same sentence.
+    They connect using your MCP URL and authenticate using the method you configured. Once connected, the AI client can discover the tools you made available and use them when they are relevant to the customer's request.
 
-{/* SCREENSHOT: docs/assets/integration-guides/connect/openapi-import.png
-     Caption: "Import an OpenAPI document to create endpoints in bulk." */}
+    If you use a custom domain, customers can connect through your own MCP URL rather than a Mitu-hosted address.
 
-</Step>
+    Learn more about [Domains](/platform/mcp/domains).
+  </Step>
 
-<Step title="Decide which operations need a signed-in customer">
+  <Step title="Verify requests from Mitu">
+    When an AI agent uses one of your tools, Mitu sends the corresponding request to your API. Before processing the request, your backend should verify that the request came from Mitu.
 
-`requires_auth` is per endpoint, so a public catalogue can stay open while anything touching an account does not.
+    When you connect your API, you receive a signing secret that your backend uses to verify requests sent by Mitu. Keep this secret secure and only use it from your server.
 
-| Usually needs a customer | Usually does not |
-| --- | --- |
-| Saved addresses and preferences | A public catalogue or menu |
-| Account-specific pricing | Published availability |
-| Order or booking history | Location lists |
-| Creating something against a profile | General stock levels |
+    Request verification is separate from your customer authentication. It confirms that the request was sent through Mitu before your application trusts the request and processes it.
 
-Two methods identify the customer. A **customer key** is one you provision and hand over, sent as `x-api-key: mcpk_...`. **OAuth** lets the customer sign in with the account they already have with you, and no key is handed out at all.
+    If you use OAuth for customer authentication, the signed-in customer's access token is also forwarded with the request so your existing authorisation and account rules can continue to apply.
 
-<Warning title="OAuth sign-in does not create a wallet">
-It creates a Mitu customer, mapped from your identity provider's `sub`. Wallets are a separate product and a separate decision.
-</Warning>
+    See [Request verification](/platform/security/request-verification) for the verification process and implementation examples.
+  </Step>
 
-[MCP authentication](/platform/mcp/authentication) covers both without repeating the setup.
+  <Step title="Return your normal API response">
+    After verification, process the request using the same business logic your application already uses and return your normal API response.
 
-</Step>
+    For example, a booking operation can return the same booking object your website or application already receives:
 
-<Step title="Connect an AI client">
+    ```json
+    {
+      "id": "bk_77213",
+      "status": "confirmed",
+      "location_id": "lagos-01",
+      "date": "2026-09-20",
+      "time": "19:30",
+      "party_size": 4
+    }
+    ```
 
-```text
-URL         https://mcp.yourdomain.com/mcp, or https://mcp.mitu.ai/mcp
-Transport   Streamable HTTP
-```
+    Mitu returns the result to the AI client so the agent can continue the customer's task. You do not need to create agent-specific response objects, conversation transcripts or additional AI fields unless they are genuinely part of your own API contract.
 
-With a customer key, the customer supplies the URL and their `mcpk_...`. With OAuth, they supply only the URL: an unauthenticated `initialize` answers 401 with a `WWW-Authenticate` header naming the resource metadata, which is what makes the client offer a sign-in rather than fail.
+    Errors should also remain useful and descriptive. If a booking cannot be completed, for example, returning the reason and any available alternatives gives the agent enough information to help the customer choose what to do next.
+  </Step>
 
-{/* SCREENSHOT: docs/assets/integration-guides/connect/add-connection.png
-     Caption: "Adding the MCP as a connection in an AI client." Never show a
-     real customer key. */}
+  <Step title="Test the integration">
+    Connect a test customer from an AI client and confirm that the client can discover the tools you configured. Test both read and write operations, confirm that your backend successfully verifies requests from Mitu and check that your normal API responses are returned correctly to the agent.
 
-[Domain and integration](/platform/mcp/domains) covers moving to your own URL.
+    Also test the failure cases that matter to your product, such as invalid input, unavailable inventory or an unauthorised customer. The agent should receive enough information from your existing API response to understand what happened and determine the appropriate next action.
 
-</Step>
-
-<Step title="Confirm the agent can discover your tools">
-
-Once connected, the client lists the tools registered for your service. That list is the confirmation the channel works.
-
-```text
-list_locations       GET   /locations       free
-check_availability   GET   /availability    free
-create_booking       POST  /bookings        free
-get_booking          GET   /bookings/{id}   free
-call_endpoint        any path on your service
-```
-
-`call_endpoint` is always present alongside the named tools. It is a fallback for paths without a tool of their own, such as a sub-path under a registered one. The named tools are what an agent should reach for, because they carry your description and your schemas.
-
-If nothing appears, check that the endpoints are registered and `is_public`, and that the customer's credential is being sent.
-
-</Step>
-
-<Step title="Call a tool, and see what reaches your backend">
-
-The customer asks for a table. The agent picks `create_booking` and calls it. What arrives at your API is your own contract:
-
-```http
-POST https://api.example.com/bookings
-content-type: application/json
-user-agent: <the caller's>
-x-mitu-agent-id: anonymous
-x-mitu-request-id: req_5f13b916
-x-mitu-amount-charged: 0
-x-mitu-signature: t=1757601046,v1=9f3c4a...b2d4
-```
-
-```json
-{
-  "location_id": "lagos-01",
-  "date": "2026-09-20",
-  "time": "19:30",
-  "party_size": 4
-}
-```
-
-The body is the body your API already understands. You do not add `agent_instruction`, `llm_context` or a conversation transcript unless your own API genuinely wants them. Mitu converts the tool call into your existing contract.
-
-**On the headers, three things are worth knowing.**
-
-Only `content-type`, `accept` and `user-agent` are forwarded from the caller. Everything else is dropped, and the Mitu headers are set afterwards, so a caller cannot smuggle in an `x-mitu-*` value of its choosing.
-
-The incoming `Authorization` is always stripped, because it is the payment credential and is Mitu's business rather than yours. When you use OAuth, the customer's own token arrives separately and is re-emitted to you as `Authorization`, so your existing endpoint keeps working unchanged.
-
-<Warning title="On a free call the amount header is present and reads `0`">
-It is absent only on a dynamic-pricing quote. So `x-mitu-amount-charged` being present does not mean you were paid, and branching on presence alone will treat every free call as a paid one. Compare the value, or branch on your endpoint's pricing model.
-</Warning>
-
-Free endpoints are rate limited per endpoint, at `rate_limit_per_minute`, defaulting to 60. Over it, the agent receives a rate-limit response and your API is never called.
-
-</Step>
-
-<Step title="Verify the signature">
-
-Free calls are signed too. Verify before you act, because everything else in the request is a plain header.
-
-```text
-x-mitu-signature: t=1757601046,v1=9f3c4a...b2d4
-
-v1 = HMAC-SHA256(signing_secret, "{t}.{request_id}.{amount}.{raw_body}")
-```
-
-Use the raw bytes, use a timing-safe compare, and enforce the timestamp. [Request signature verification](/platform/security/request-verification) has the algorithm and a worked implementation.
-
-For anything with side effects, deduplicate on `x-mitu-request-id`. A booking endpoint called twice for one request id is a double booking.
-
-</Step>
-
-<Step title="Return your normal response">
-
-```json title="201 Created"
-{
-  "id": "bk_77213",
-  "status": "confirmed",
-  "location_id": "lagos-01",
-  "date": "2026-09-20",
-  "time": "19:30",
-  "party_size": 4
-}
-```
-
-Mitu passes it back to the agent through the call it started, adding `x-mitu-request-id` to the response. Hop-by-hop headers are stripped and `content-length` is recomputed; everything else you set comes through.
-
-Your backend never needs to know the caller was an agent, beyond the headers it verified.
-
-</Step>
-
-<Step title="Handle errors in a way an agent can act on">
-
-An agent reads your error and decides what to do next. A status with an empty body gives it nothing, so it guesses, and usually retries.
-
-```json title="422 Unprocessable Entity"
-{
-  "error": "no_availability",
-  "message": "No table for 4 at 19:30 on 2026-09-20. The nearest times are 18:45 and 20:30.",
-  "alternatives": ["18:45", "20:30"]
-}
-```
-
-That response lets the agent offer the customer something. `422` with no body makes it try again with the same values.
-
-Say what was wrong, say whether retrying could work, and where a near miss exists, name it. Keep using your own status codes and shapes; this is about the body being informative, not about adopting a new error format.
-
-</Step>
-
-<Step title="Test the whole flow">
-
-```text
-1. Health check passes
-2. The tools appear in a connected client
-3. A free read returns real data
-4. A write creates the thing, once
-5. The same request id twice creates one record
-6. A tampered body fails verification
-7. An error returns a body the agent can use
-```
-
-Then add operations one at a time. A channel with four well-described tools is more useful than one with forty the model cannot choose between.
-
-</Step>
-
+    Once the core flow works, add more operations gradually rather than making your entire API available at once.
+  </Step>
 </Steps>
 
-## Adding paid operations later
+## Adding payments later
 
-Nothing in this guide requires payment, and a free channel is a complete integration. When you want an operation to charge, set its `pricing_type` and the payment layer appears in front of it without your endpoint changing.
+Your MCP integration does not need payments or Agent Wallets to work. You can make free operations available to AI agents and add paid capabilities later when your product requires them.
 
-[Accept payments from agents](/guides/integration-guides/accept-payment-from-agents) picks up exactly there.
+When you want AI agents to pay before using a particular operation, configure the payment behaviour for that operation and let Mitu handle the agent payment flow before the request reaches your API. Your existing endpoint can continue handling the underlying product or service.
 
-## A worked example
+Continue with [Accept payments from agents](/guides/integration-guides/accept-payment-from-agents) when you are ready to add paid operations.
 
-<Steps>
+## Your product is now available to AI agents
 
-<Step title="The existing product">
-A restaurant booking service with four operations already serving its web and mobile apps.
+Your existing product can now be used from compatible AI clients without creating a separate backend for agents. Customers connect through MCP, agents discover the operations you chose to make available and those operations continue to run against the same API and business logic your product already uses.
 
-```text
-GET  /locations
-GET  /availability
-POST /bookings
-GET  /bookings/{id}
-```
-</Step>
+You remain in control of which capabilities are available, which ones require a customer account and how your backend processes each request. MCP becomes another way customers can interact with your product rather than a replacement for the channels you already have.
 
-<Step title="You connect the API">
-Base URL `https://api.example.com`, health check `/healthz`. The signing secret goes into your backend's config.
-</Step>
-
-<Step title="You register the four operations">
-Each with a description, a `when_to_use`, and input and output schemas. `create_booking` and `get_booking` are marked `requires_auth: true`; the two reads are not.
-</Step>
-
-<Step title="A customer connects">
-They add the MCP URL to their AI client and sign in with the account they already have with you.
-</Step>
-
-<Step title="They ask for a table">
-"Book me a table for four at the Lagos branch on Saturday at 7:30."
-</Step>
-
-<Step title="The agent works it out">
-`list_locations` to resolve "Lagos branch", `check_availability` for Saturday, then `create_booking`.
-</Step>
-
-<Step title="Your API answers">
-```json
-{ "id": "bk_77213", "status": "confirmed", "time": "19:30", "party_size": 4 }
-```
-</Step>
-
-<Step title="The customer gets an answer">
-"Booked, reference bk_77213, Saturday at 7:30 for four." The same booking, in the same database, made through the same endpoint as the app.
-</Step>
-
-</Steps>
-
-## Next steps
+## Continue building
 
 <CardGroup cols={2}>
-  <Card title="Bring your product to AI agents" icon="regular rocket" href="/guides/use-cases/agent-channels">
-    The same journey as a use case, with the product context.
-  </Card>
   <Card title="MCP endpoints" icon="regular list-check" href="/platform/mcp/endpoints">
-    Every field, and designing a set of tools.
+    Configure the operations AI agents can discover and use.
   </Card>
+
+  <Card title="Tool schemas" icon="regular brackets-curly" href="/platform/mcp/tool-schemas">
+    Describe the inputs and outputs for each operation.
+  </Card>
+
   <Card title="MCP authentication" icon="regular key" href="/platform/mcp/authentication">
-    Customer keys and OAuth.
+    Connect customers using customer keys or OAuth.
   </Card>
-  <Card title="Verify requests" icon="regular shield-check" href="/platform/security/request-verification">
-    The algorithm and the rules.
+
+  <Card title="Request verification" icon="regular shield-check" href="/platform/security/request-verification">
+    Verify requests before processing them in your backend.
   </Card>
 </CardGroup>

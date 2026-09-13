@@ -1,217 +1,110 @@
 ---
 title: Agent payments
-subtitle: How a payment happens between an AI agent and your business, and what your backend has to do about it.
+subtitle: Understand how AI agents complete payments before your API delivers a paid product, service or action.
 ---
 
-Mitu runs the payment flow so you can go on delivering the product, service, booking or API operation. You do not implement a payment protocol.
+## How agent payments work
 
-<Frame caption="The payment completes before your API is asked to do anything.">
-  <img src="../assets/diagrams/agent-payments.png" alt="Sequence diagram with three participants: AI Agent, Mitu and Your API. 1, the agent requests a paid action. 2, Mitu determines what is required, such as the amount and payment methods. 3, the agent pays. 4, Mitu verifies the settlement. 5, Mitu sends a signed paid request to your API. 6, you verify it. 7, you do the work. 8, your normal response goes back through Mitu to the agent." />
+When an AI agent uses a paid operation, Mitu handles the payment before your API is asked to fulfil the request.
+
+<Frame caption="Mitu completes the payment before your API is asked to do any work.">
+  <img src="../assets/diagrams/agent-payments.png" alt="Sequence diagram with three participants: AI Agent, Mitu and Your API. The agent calls a paid tool. Mitu replies with 402 Payment Required and the accepted methods. The agent completes the payment. Mitu processes and confirms it, then sends the request with the payment confirmation to Your API. Your API verifies Mitu, processes the request, and returns the result through Mitu to the agent." />
 </Frame>
 
-You are paid before you are called. That ordering is deliberate, and it has one consequence worth planning for, covered at the end of this page.
+The agent first attempts the paid operation and receives a payment requirement describing what must be paid and the methods available. The agent completes the payment using one of those methods, and Mitu confirms the payment before sending the request to your API.
 
-## The payment requirement
+Once payment is confirmed, your API receives the request together with payment context and a verification signature. Verify that the request came through Mitu before delivering the product, service or action, then process it using your existing business logic and return your normal API response.
 
-An agent calling a paid operation gets a `402` describing what it must satisfy.
+See [Request verification](/platform/security/request-verification) for the verification process.
 
-```json title="402 response body"
-{
-  "type": "https://paymentauth.org/problems/payment-required",
-  "status": 402,
-  "intent": "dynamic",
-  "service":  { "id": "svc_…", "name": "AgentPizza" },
-  "endpoint": { "id": "ep_…",  "path": "/orders" },
-  "amount":   { "value": "0.015000", "currency": "USDC" },
-  "accepts": [
-    { "id": "chal_1", "method": "x402", "network": "base",
-      "asset": "USDC", "amount": "0.015000",
-      "recipient": "0x1DDb…", "nonce": "0x81e0…" },
-    { "id": "chal_2", "method": "mpp_crypto", "network": "tempo",
-      "asset": "USDC", "amount": "0.015000", "recipient": "0x1DDb…" },
-    { "id": "chal_3", "method": "mpp_spt", "amount": "0.015000",
-      "currency": "usdc", "networkId": "profile_…" }
-  ]
-}
-```
+<Note title="An Agent Wallet is not required">
+  An AI agent does not need a Mitu Agent Wallet to pay your business. Agent Wallets are a separate capability for businesses that want to give their own customers wallets their AI agents can spend from.
+</Note>
 
-<ParamField path="intent" type="fixed | dynamic | tiered | session">
-  Which [pricing](/platform/payments/pricing) model produced the amount. On `dynamic` the figure was quoted by you, for this specific request.
-</ParamField>
+## Payment methods
 
-<ParamField path="service" type="object">
-  `id` and `name`, so an agent can tell its user who is being paid.
-</ParamField>
+Mitu supports agent payments through x402 and MPP. These protocols determine how the agent satisfies the payment requirement, while your API continues to work with the same paid operation regardless of which supported method the agent uses.
 
-<ParamField path="endpoint" type="object">
-  `id` and `path` of the operation that requires payment.
-</ParamField>
+**x402** supports USDC payments on Base. **MPP** supports crypto and card-backed agent payment flows, depending on the payment method available to the payer.
 
-<ParamField path="amount" type="object">
-  `value` and `currency` for the charge. Each entry in `accepts` repeats it in the terms of its own method.
-</ParamField>
+You choose which supported payment methods are available for the paid operation. The agent can then use a method it supports without your backend implementing a separate payment integration for each protocol.
 
-<ParamField path="accepts" type="array">
-  The challenges the agent may satisfy, each with an `id` and a `method` plus the fields that method needs. The response also sets `WWW-Authenticate`, one entry per challenge, for clients that read the header rather than the body.
-</ParamField>
+## Pricing
 
-<Warning title="402 does not mean a payment failed">
-Nothing has been attempted and nothing declined. It is the protocol saying what is required to continue. An integration that records a 402 as a failure will log one before every successful agent payment it takes.
-</Warning>
+Pricing belongs to the operation being called rather than the agent making the payment. You can configure an operation with the pricing model appropriate for the product or service you provide.
 
-## How an agent pays
+For a fixed-price operation, the amount is known before the agent attempts to pay. For dynamic pricing, your API determines the amount from the request before payment takes place. Other pricing models can support different usage patterns where appropriate.
 
-Three methods, two families. You choose which to accept; the payer chooses one it can satisfy. Offering more than one costs nothing and widens who can pay you.
+See [Pricing](/platform/payments/pricing) for supported pricing models and the complete pricing flow.
 
-| Method | Settles in | The payer needs |
-| --- | --- | --- |
-| `x402` | USDC on Base | USDC, and no gas token |
-| `mpp_crypto` | USDC on Tempo | USDC on Tempo |
-| `mpp_spt` | Card, via a single-purpose token | A card, and no wallet |
+## Requests after payment
 
-**x402** uses EIP-3009 `transferWithAuthorization`. The payer signs an authorisation for the amount and recipient in the challenge; Mitu broadcasts the transaction and pays the gas. That last part matters for agents: a wallet holding only the asset being spent can still settle, with no ETH for gas.
+Payment confirmation and fulfilment are separate parts of the transaction. A successful payment means the agent has satisfied the payment requirement, but your API still needs to process the request and deliver the expected result.
 
-**MPP** covers the other two. `mpp_crypto` is the same idea on Tempo. `mpp_spt` is card-backed, and exists for payers with no wallet at all, which is the common case when the agent is acting for an ordinary consumer.
+When Mitu sends the paid request to your API, verify the request before doing any paid work. After verification succeeds, process it using the same business logic your application already uses and return the normal result.
 
-`mpp_spt` is a method within MPP, not a third protocol standing beside it.
+For operations that create orders, bookings or other side effects, handle requests idempotently so a repeated delivery does not create the same result twice.
 
-None of this is yours to implement. You accept a method by listing it, and Mitu settles it.
+See [Request verification](/platform/security/request-verification) for verifying requests from Mitu.
 
-## What reaches your API
+## Paying with an Agent Wallet
 
-Settlement is confirmed before your endpoint sees anything.
+An Agent Wallet can be one source of funds an AI agent uses when making a payment. Agent Wallets belong to customers and let their AI agents make permitted payments on their behalf, subject to the controls configured for the wallet.
 
-| Header | Meaning |
-| --- | --- |
-| `x-mitu-signature` | Proof the request came from Mitu |
-| `x-mitu-request-id` | `req_…`, unique per call. Your idempotency key |
-| `x-mitu-amount-charged` | The amount. See the note below |
-| `x-mitu-customer-id` | `cus_…`, when the payer is a known Mitu customer |
-| `x-mitu-customer-ref` | Your own id for that customer, when applicable |
-| `x-mitu-agent-id` | Which agent made the call |
-| `authorization` | The customer's own token, when you use OAuth sign-in |
+When an agent receives a supported payment URL, it can pass that URL to Mitu's `pay` tool and use an Agent Wallet available to the connected customer. Mitu checks the wallet, applies the configured controls and completes the payment when it is permitted.
 
-Not every header is on every request. An agent paying from its own funds is nobody's customer, so the customer headers are absent, and that is ordinary rather than a fault.
+The agent does not receive wallet keys, withdraw funds or take ownership of the wallet. It only uses the wallet for supported payments on behalf of the customer.
 
-Only `content-type`, `accept` and `user-agent` are forwarded from the caller; the `x-mitu-*` headers are set afterwards, so a caller cannot supply its own. The incoming `Authorization` is always stripped, because it is the payment credential and is Mitu's business. Where you run OAuth, the customer's token travels separately and is re-emitted to you as `Authorization`.
-
-<Warning title="The amount header does not mean you were paid">
-On a **free** endpoint it is present and reads `0`. It is **absent** only on a dynamic-pricing quote. So branching on presence alone treats every free call as a paid one. Compare the value, or branch on the endpoint's pricing model.
-</Warning>
-
-## Verify the paid request
-
-```text
-x-mitu-signature: t=1757601046,v1=9f3c4a…b2d4
-
-v1 = HMAC-SHA256(signing_secret, "{t}.{request_id}.{amount}.{raw_body}")
-```
-
-`amount` is the `x-mitu-amount-charged` header, or an **empty string** when that header is absent, which is what lets one function serve both legs of a dynamic call. `raw_body` is the exact bytes received.
-
-Four rules, and each exists because of a specific failure:
-
-1. **Verify before reading anything else.** The customer id is a plain header and means nothing until the signature proves the request is Mitu's.
-2. **Use the raw body.** Parsing and re-serialising changes key order and whitespace, and the check fails. This is the commonest cause of a `401` on a paid request, and it presents as a signing-secret problem when it is not one.
-3. **Enforce the timestamp.** Mitu stamps `t`, but only you can reject a stale one. Without a window, a captured request works forever.
-4. **Deduplicate on `x-mitu-request-id`.** The signature stays valid for its lifetime, so nothing else stops the same paid request being served twice.
-
-[Request signature verification](/platform/security/request-verification) has a worked implementation and the timing-safe comparison.
-
-## Confirming a payment independently
-
-Signature verification is the primary mechanism and is sufficient. This endpoint is a second, independent check:
-
-```bash
-curl --request GET \
-  --url https://api.mitu.ai/v1/proxy-requests/req_5f13b916 \
-  --header "x-api-key: $MITU_API_KEY"
-```
-
-```json title="200 OK"
-{
-  "request_id": "req_5f13b916",
-  "service_id": "svc_dhydwg80dzb4vy6xjl2m",
-  "paid": true,
-  "amount": "43.200000",
-  "currency": "USDC",
-  "method": "POST",
-  "path": "/orders",
-  "payment_method": "x402",
-  "wallet_transaction_id": "f5533e85-16d8-4f58-ba22-86dba59c6a15",
-  "created_at": "2026-09-11T15:01:32.760Z"
-}
-```
-
-`paid` is true when an amount was actually taken. Lookups are scoped to your own account.
-
-The shape is deliberate: rather than asserting that payment happened, Mitu exposes something you can call and authenticate yourself. `wallet_transaction_id` names the settlement, which you can check on chain, and that is a stronger position than trusting either a header or this endpoint.
+See [Wallet tools](/platform/agent-wallets/wallet-tools) for the current `pay` tool schema and [Build agents that can pay](/guides/use-cases/agent-purchasing) for the complete agent-side journey.
 
 ## Paid but not delivered
 
-Settlement happens before your endpoint is called, and it is final. If your endpoint then refuses, you have been paid and the payer has nothing.
+A payment can complete successfully even if your API is unable to fulfil the request afterwards. Treat payment state and fulfilment state separately so your system can distinguish between money received and work successfully delivered.
 
-```json
-{ "delivered": false, "failure_status": 500 }
-```
+If fulfilment fails after payment, do not ask the agent to make the same payment again. Use the original paid request to determine the appropriate next action, such as retrying fulfilment, resolving the failure or refunding the payer where necessary.
 
-`failure_status` is the status you answered with, and it usually names the cause. A `401` almost always means your signing secret and Mitu's no longer match, or the body was re-serialised before verifying. A `500` is your own code. A `404` means the registered path is no longer served.
+Design paid operations so fulfilment is reliable and repeated requests can be handled safely.
 
-Nothing downstream reverses an on-chain settlement, and no retry returns the money. Treat it as money owed: fulfil the work, deliver the result later, or refund the payer. `x-mitu-customer-ref` on the original request maps to your own record, which is usually how you reach them.
+## Settlement
 
-Most occurrences come from a short list of causes. A rotated signing secret your backend does not have yet, since rotation is immediate and total with no overlap window. Re-serialising the body before verifying. A deploy that changes or removes the registered path.
+Payments you receive from AI agents are added to your Mitu balance. How the agent completed the payment does not change how your business receives or settles the resulting funds.
 
-The dashboard keeps a running total, and the events below carry the flag.
+From your balance, you can settle funds to a supported bank account or withdraw them to an onchain address.
 
-## Events
-
-`payment.completed` fires when you are paid.
-
-```json
-{
-  "event": "payment.completed",
-  "event_data": {
-    "source": "mcp",
-    "service_id": "svc_dhydwg80dzb4vy6xjl2m",
-    "endpoint_id": "ep_j7z4sqeiyqu7p4ljlg4s",
-    "request_path": "/orders",
-    "customer_id": "cus_0t9549fps3xd",
-    "customer_ref": "auth0|68f3c2a1b9",
-    "amount_paid": "0.035000",
-    "currency": "USDC",
-    "payment_method": "x402",
-    "network": "base",
-    "transaction_id": "f5533e85-16d8-4f58-ba22-86dba59c6a15",
-    "tx_hash": "0xfe093b9a…",
-    "reference": "ORDER-8841",
-    "delivered": true
-  }
-}
-```
-
-`payment.failed` fires when an attempt did not complete, with a `reason` of `no_supported_method`, `insufficient_balance`, `over_limit`, `settlement_failed` or `upstream_rejected`. They call for different responses: `no_supported_method` usually means the methods on your endpoint are too narrow for the agents reaching you.
-
-### When you are both the wallet issuer and the payee
-
-If one of your own wallet customers pays you, two events describe one movement: `wallet.debited` for their side and `payment.completed` for yours.
-
-Join them on **`tx_hash`**, which is the on-chain settlement and identical on both. Do not join on `transaction_id`: each event names the record in the system that raised it, and they are different rows with different values.
-
-An agent paying from its own funds raises `payment.completed` alone.
+Learn more about [Settlement](/platform/payments/settlement).
 
 ## Related
 
 <CardGroup cols={2}>
-  <Card title="Pricing" icon="regular tag" href="/platform/payments/pricing">
-    How the amount is decided, including dynamic quoting.
+  <Card title="Pricing" icon="regular calculator" href="/platform/payments/pricing">
+    Configure how much agents pay for an operation.
   </Card>
-  <Card title="Accept payments from agents" icon="regular rocket" href="/guides/integration-guides/accept-payment-from-agents">
-    The implementation, end to end.
-  </Card>
+
   <Card title="Request verification" icon="regular shield-check" href="/platform/security/request-verification">
-    The algorithm and a worked implementation.
+    Verify paid requests before your API fulfils them.
   </Card>
-  <Card title="Events" icon="regular bell" href="/platform/webhooks/events">
-    Every payload.
+
+  <Card title="Payment experiences" icon="regular link" href="/platform/payments/payment-experiences">
+    Create payments that can be completed by people or AI agents.
+  </Card>
+
+  <Card title="Agent Wallets" icon="regular wallet" href="/platform/agent-wallets/overview">
+    Give customers wallets their AI agents can use for permitted payments.
+  </Card>
+
+  <Card title="Sell your API to AI agents" icon="regular rocket" href="/guides/use-cases/api-monetisation">
+    Charge AI agents for access to API capabilities.
+  </Card>
+
+  <Card title="Let AI agents buy from you" icon="regular basket-shopping" href="/guides/use-cases/agent-commerce">
+    Accept agent payments for orders, bookings and other purchases.
+  </Card>
+
+  <Card title="Build agents that can pay" icon="regular wallet" href="/guides/use-cases/agent-purchasing">
+    Let an AI agent make payments using its customer's Agent Wallet.
+  </Card>
+
+  <Card title="Settlement" icon="regular building-columns" href="/platform/payments/settlement">
+    Settle the funds you receive to a bank account or onchain address.
   </Card>
 </CardGroup>

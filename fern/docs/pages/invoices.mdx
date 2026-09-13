@@ -1,11 +1,15 @@
 ---
 title: Invoices
-subtitle: A formal billing document addressed to a customer, payable by a person or an agent through the same two entry points as a payment link.
+subtitle: Create and manage invoices with line items, due dates and payment experiences for people and AI agents.
 ---
 
-Use an invoice where a payment link would be too thin: line items, tax, a discount, a due date, an invoice number, and a record that moves through a lifecycle rather than simply being paid or not.
+Use invoices when you need a formal billing record rather than a simple one-time payment. An invoice can contain multiple line items, tax, discounts, a due date and your own invoice number, while giving you a lifecycle to track from creation through payment.
 
-## Creating one
+Invoices are addressed to customers and can be paid by either a person or an AI agent. Both payer experiences belong to the same invoice, so your billing record and reconciliation remain consistent regardless of how payment is completed.
+
+## Create an invoice
+
+Create an invoice for the customer you want to bill and provide at least one line item.
 
 ```bash title="Create an invoice"
 curl --request POST \
@@ -18,9 +22,17 @@ curl --request POST \
     "description": "Design services, September",
     "currency": "USD",
     "lineItems": [
-      { "name": "Design retainer", "quantity": 1, "amount": 1200.00 },
-      { "name": "Additional revisions", "description": "3 rounds",
-        "quantity": 3, "amount": 150.00 }
+      {
+        "name": "Design retainer",
+        "quantity": 1,
+        "amount": 1200.00
+      },
+      {
+        "name": "Additional revisions",
+        "description": "3 rounds",
+        "quantity": 3,
+        "amount": 150.00
+      }
     ],
     "taxAmount": 123.75,
     "discountAmount": 0,
@@ -28,68 +40,108 @@ curl --request POST \
   }'
 ```
 
-<ParamField path="customerId" type="string" required={true}>
-  Who the invoice is addressed to. See [customers](/platform/customers/customer-api).
-</ParamField>
+### Parameters
 
-<ParamField path="lineItems" type="array" required={true}>
-  At least one. Each carries `name`, `quantity`, `amount`, and an optional `description`.
-</ParamField>
+| Parameter | Type | Description |
+| --- | --- | --- |
+| `customerId` | `string` · required | The customer the invoice belongs to. The customer must already exist before you create the invoice. See [Customers](/platform/customers/customer-api). |
+| `lineItems` | `array` · required | The products, services or other charges included on the invoice. Provide at least one line item. Each contains `name`, `quantity` and `amount`, with an optional `description`. |
+| `currency` | `string` · required | The currency used for the invoice and its line items. |
+| `invoiceNumber` | `string` | Your own invoice number. If you do not provide one, a number is assigned for you. |
+| `description` | `string` | Additional context describing what the invoice is for. |
+| `taxAmount` | `number` | The tax added to the invoice total. The default is `0`. |
+| `discountAmount` | `number` | The discount deducted from the invoice total. The default is `0`. |
+| `dueAt` | `string` | The date and time the invoice is due, provided as an ISO 8601 timestamp. |
 
-<ParamField path="currency" type="string" required={true}>
-  The currency of every line and of the total.
-</ParamField>
+## Invoice lifecycle
 
-<ParamField path="invoiceNumber" type="string">
-  Your own number. Assigned for you when omitted.
-</ParamField>
+Creating an invoice does not immediately send it to the customer. A new invoice starts as a draft, giving you an opportunity to review or amend the billing information before making it payable.
 
-<ParamField path="taxAmount" type="number" default="0">
-  Added to the line total.
-</ParamField>
+When the invoice is ready, send it to the customer.
 
-<ParamField path="discountAmount" type="number" default="0">
-  Taken off the line total.
-</ParamField>
-
-<ParamField path="dueAt" type="string">
-  ISO 8601. What "overdue" is measured against.
-</ParamField>
-
-## The lifecycle
-
-```text
-POST   /v1/invoices               create a draft
-POST   /v1/invoices/{id}/send     send it to the customer
-GET    /v1/invoices               list them
-GET    /v1/invoices/{id}          read one
-PATCH  /v1/invoices/{id}          amend one
-DELETE /v1/invoices/{id}/cancel   cancel one
+```http
+POST /v1/invoices/{id}/send
 ```
 
-Creating and sending are separate calls, so a draft can be checked or amended before the customer ever sees it.
+You can retrieve and manage invoices through the API throughout their lifecycle.
 
-## Being paid
-
-A sent invoice is payable the same two ways a payment link is: a checkout page the customer opens, and a 402-protected URL on the API origin that an agent calls. Both use the `/invoice/` segment with the invoice id.
-
-```text
-https://mitu.ai/invoice/inv_5v6nxq2zlk9mpd8t
-https://api.mitu.ai/invoice/inv_5v6nxq2zlk9mpd8t
+```http
+GET    /v1/invoices
+GET    /v1/invoices/{id}
+PATCH  /v1/invoices/{id}
+DELETE /v1/invoices/{id}/cancel
 ```
 
-[Payment links](/platform/payments/payment-experiences) covers the shape of both paths, and [the 402 payment flow](/platform/payments/agent-payments) the agent side.
+Keep invoice state in your own system in sync with the API and webhook events rather than relying on what the payer sees in their payment experience.
 
-{/* SCREENSHOT: docs/assets/platform/payments/invoice.png
-     Caption: "Use invoices where the payment belongs to a formal billing
-     workflow." Use the real invoice view. No real customer data. */}
+## Getting an invoice paid
 
-## Events
+A sent invoice can be completed by either a person or an AI agent. The invoice provides the appropriate payment entry point for each payer while keeping both attached to the same underlying invoice.
 
-`invoice.created`, `invoice.sent` and `invoice.paid` are emitted today. `payment.completed` also fires when the money arrives, carrying `source: "invoice"` and the `invoice_id`.
+A person opens the hosted invoice payment experience and completes the payment through the available methods. An AI agent uses the programmatic invoice payment URL and completes the payment through the agent payment flow.
 
-<Note title="Two declared events are not yet emitted">
-`invoice.viewed` and `invoice.overdue` exist as event types but nothing raises them in the current implementation. Do not build a dunning flow on `invoice.overdue`: derive overdue from `dueAt` and the paid state instead.
+Use the URLs returned for the invoice rather than constructing them yourself. This keeps your integration independent of how invoice payment URLs are structured.
+
+<Note title="No separate invoice for an AI agent">
+  You do not need to create another invoice when an AI agent is paying on behalf of the customer. The same invoice can support both human and agent payment experiences.
 </Note>
 
-[Events](/platform/webhooks/events) has the payloads.
+See [Payment experiences](/platform/payments/payment-experiences) for how human and agent payment entry points work, and [Agent payments](/platform/payments/agent-payments) for the agent payment flow.
+
+## Track invoice events
+
+Use webhook events to keep the invoice state in your application up to date. The invoice lifecycle can produce events when an invoice is created, sent and paid.
+
+```text
+invoice.created
+invoice.sent
+invoice.paid
+```
+
+When payment is received, `payment.completed` is also emitted for the underlying payment. Use the invoice information in the event to associate the payment with the correct billing record.
+
+Do not update invoice state based only on a browser redirect or information reported by an AI client. Process verified webhook events or retrieve the current invoice state through the API.
+
+<Note title="Events not yet emitted">
+  `invoice.viewed` and `invoice.overdue` are declared event types but are not currently emitted. Do not depend on them in production until they are supported.
+
+  If you need to determine whether an invoice is overdue, compare `dueAt` with the current invoice payment state in your own system.
+</Note>
+
+See [Events](/platform/webhooks/events) for invoice and payment event payloads.
+
+## Reconcile invoice payments
+
+Keep your own invoice number or business reference associated with the invoice so your application can reconcile payments against records it already understands.
+
+An invoice being paid and the underlying service being delivered are separate business states. When payment completes, update the billing record and then continue whatever fulfilment process applies to the invoice in your own system.
+
+This is especially important when invoice payment triggers another action, such as activating a service, releasing an order or confirming a booking.
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="Payment experiences" icon="regular link" href="/platform/payments/payment-experiences">
+    Understand payment experiences for people and AI agents.
+  </Card>
+
+  <Card title="Agent payments" icon="regular credit-card" href="/platform/payments/agent-payments">
+    Understand how AI agents complete payments programmatically.
+  </Card>
+
+  <Card title="Customers" icon="regular user" href="/platform/customers/customer-api">
+    Create and manage the customers invoices belong to.
+  </Card>
+
+  <Card title="Webhooks" icon="regular bell" href="/platform/webhooks/overview">
+    Keep your application updated as invoice state changes.
+  </Card>
+
+  <Card title="Events" icon="regular waveform" href="/platform/webhooks/events">
+    See the events emitted during the invoice lifecycle.
+  </Card>
+
+  <Card title="Settlement" icon="regular building-columns" href="/platform/payments/settlement">
+    Settle the funds you receive to a bank account or onchain address.
+  </Card>
+</CardGroup>
