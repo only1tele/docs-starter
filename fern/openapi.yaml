@@ -20,12 +20,13 @@ tags:
   description: Issue and retrieve Agent Wallets for customers.
 - name: Payment links
   description: Create and manage payment links.
-- name: Invoices
-  description: Create and manage invoices.
-- name: Subscription plans
-  description: Create and retrieve subscription plans.
-- name: Subscriptions
-  description: Create and manage subscriptions.
+# Commented out with their paths — see the note in `paths:`.
+# - name: Invoices
+#   description: Create and manage invoices.
+# - name: Subscription plans
+#   description: Create and retrieve subscription plans.
+# - name: Subscriptions
+#   description: Create and manage subscriptions.
 - name: Agent payments
   description: Verify requests paid through Mitu.
 paths:
