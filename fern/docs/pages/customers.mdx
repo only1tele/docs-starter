@@ -84,6 +84,10 @@ The Mitu `cus_...` identifier is still useful when calling APIs that operate dir
 
 The `key` returned when the customer is created is a customer key with the `mcpk_...` prefix. It can be used when that customer connects to an MCP-compatible AI client using customer-key authentication.
 
+<Warning title="The key is returned once">
+  The customer key appears only in the response to this request and cannot be retrieved later. Save it or pass it to the customer straight away. If it is lost, [rotate the key](/api-reference/customers/rotate-customer-key) to issue a new one.
+</Warning>
+
 Treat the returned key as a credential and provide it only to the customer it belongs to. Customer keys are separate from your merchant API key and should not be used by your backend as a replacement for `sk_...` credentials.
 
 See [Customer keys](/platform/customers/customer-keys) for how customer-key authentication works.
