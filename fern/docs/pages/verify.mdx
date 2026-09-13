@@ -1,112 +1,156 @@
 ---
 title: Request verification
-subtitle: Mitu signs every request it forwards. Verify the signature before your endpoint does any work.
+subtitle: Verify that requests sent to your API came through Mitu before processing them.
 ---
 
-You give Mitu no credential for your API. Instead, Mitu signs each forwarded request with a secret it issues to you, shown on the Integration page as `mps_...`. That signature is the only thing that distinguishes a genuine call from anyone who has guessed your URL.
+When an AI agent uses one of your tools, Mitu sends the corresponding request to your API. Your backend should verify the request before trusting Mitu-specific headers, customer context or payment information.
 
-## The headers
+When you connect your API, Mitu provides a signing secret with the `mps_...` prefix. Keep this secret on your server and use it only to verify requests sent by Mitu. You do not provide Mitu with your application's own API credential for this purpose.
 
-```text
-x-mitu-signature       proof the request is from Mitu
-x-mitu-request-id      req_... unique per call, use it for idempotency
-x-mitu-amount-charged  present only when money moved
-x-mitu-customer-id     cus_... Mitu's id for the payer
-x-mitu-customer-ref    your id for the payer, from client_reference_id
-x-mitu-agent-id        which agent made the call
-authorization          the customer's token, when OAuth is in use
-```
+Request verification is separate from customer authentication. Verification proves that the request came through Mitu, while customer authentication identifies the customer the AI agent is acting for.
 
-`x-mitu-customer-ref` is the `client_reference_id` you set when you created the customer, which is what lets you look the person up in your own system without storing Mitu's id.
+## Request headers
 
-`x-mitu-amount-charged` is absent on a price check, so a request without it is normal rather than an error. On a [dynamic](/platform/payments/pricing) endpoint your quote leg will always lack it.
+Requests sent through Mitu can include the following headers.
 
-## The signature
+| Header | Description |
+| --- | --- |
+| `x-mitu-signature` | Signature used to verify that the request came through Mitu. |
+| `x-mitu-request-id` | Unique identifier for the forwarded request. Use it when deduplicating operations with side effects. |
+| `x-mitu-amount-charged` | Amount associated with a paid request when applicable. |
+| `x-mitu-customer-id` | Mitu customer identifier when the request has customer context. |
+| `x-mitu-customer-ref` | Your customer reference associated with that customer. |
+| `x-mitu-agent-id` | Identifier associated with the agent making the request, when available. |
+| `authorization` | The customer's access token when OAuth customer authentication is being used. |
 
-```text
+Not every request contains every header. Customer headers are only present when a customer has been identified, and payment-specific information is only present where it applies to the payment flow.
+
+Do not use the presence or absence of `x-mitu-amount-charged` as a substitute for request verification. Always verify the signature first.
+
+## Verify the signature
+
+A signed request includes a timestamp and signature value in `x-mitu-signature`.
+
+```http
 x-mitu-signature: t=1757601046,v1=9f3c4a...b2d4
 ```
 
-`v1` is:
+The signature is produced from the signing secret and the signed payload.
 
 ```text
-HMAC-SHA256(signing_secret, "{t}.{request_id}.{amount}.{raw_body}")
+HMAC-SHA256(
+  signing_secret,
+  "{timestamp}.{request_id}.{amount}.{raw_body}"
+)
 ```
 
-```text
-t            the timestamp from the header itself
-request_id   the x-mitu-request-id header
-amount       the x-mitu-amount-charged header, or an EMPTY STRING when that
-             header is absent
-raw_body     the exact bytes received, not re-serialised JSON
-```
+| Component | Value |
+| --- | --- |
+| `timestamp` | The `t` value from `x-mitu-signature`. |
+| `request_id` | The value of `x-mitu-request-id`. |
+| `amount` | The value of `x-mitu-amount-charged`, or an empty string when it is absent. |
+| `raw_body` | The exact request body bytes received by your server. |
 
-## In Node
+The body must be verified in the same form that was signed. Parsing JSON and then serialising it again can change whitespace or field ordering and cause a valid signature to fail.
+
+## Node.js example
 
 ```js title="verify.js"
 const crypto = require('crypto')
 
-// Keep the raw body. express.json() throws it away.
 app.use(express.json({
-  verify: (req, _res, buf) => { req.rawBody = buf.toString('utf8') },
+  verify: (req, _res, buf) => {
+    req.rawBody = buf.toString('utf8')
+  },
 }))
 
-function verify(req, secret) {
+function verifyMituRequest(req, secret) {
   const header = req.get('x-mitu-signature') || ''
+
   const parts = Object.fromEntries(
-    header.split(',').map((p) => p.split('=')),
+    header.split(',').map((part) => part.split('=')),
   )
+
   const { t, v1 } = parts
-  if (!t || !v1) return false
 
-  // Reject anything older than five minutes, so a captured request
-  // cannot be replayed later.
-  if (Math.abs(Date.now() / 1000 - Number(t)) > 300) return false
+  if (!t || !v1) {
+    return false
+  }
 
+  if (Math.abs(Date.now() / 1000 - Number(t)) > 300) {
+    return false
+  }
+
+  const requestId = req.get('x-mitu-request-id')
   const amount = req.get('x-mitu-amount-charged') ?? ''
-  const signed = `${t}.${req.get('x-mitu-request-id')}.${amount}.${req.rawBody}`
-  const expected = crypto.createHmac('sha256', secret)
-    .update(signed).digest('hex')
+  const signedPayload = `${t}.${requestId}.${amount}.${req.rawBody}`
 
-  return crypto.timingSafeEqual(Buffer.from(v1), Buffer.from(expected))
+  const expected = crypto
+    .createHmac('sha256', secret)
+    .update(signedPayload)
+    .digest('hex')
+
+  if (expected.length !== v1.length) {
+    return false
+  }
+
+  return crypto.timingSafeEqual(
+    Buffer.from(v1),
+    Buffer.from(expected),
+  )
 }
 ```
 
-## Rules
+The five-minute window in this example is a policy your own backend enforces. Choose a tolerance appropriate for your infrastructure rather than treating the value as fixed.
 
-1. **Verify before you read anything else.** The customer id is a plain header. It means nothing until the signature proves the request is Mitu's.
-2. **Use a timing-safe compare.** A plain `===` leaks the secret a byte at a time.
-3. **Check the timestamp.** Mitu stamps it, but only you can enforce it. Without that check a captured request works forever.
-4. **Use the raw body.** Parsing and re-serialising changes key order and whitespace, and the signature then fails. This is the most common mistake.
-5. **Deduplicate on `request_id`.** The signature stays valid for its lifetime, so this is the only thing stopping the same paid request being served twice.
+## Verification rules
 
-## Idempotency
+Your backend should verify the request before reading Mitu-specific customer or payment context. After verification succeeds, use the request ID to protect operations with side effects from being performed more than once.
 
-Rule 5 above matters most where your endpoint has side effects. A delivery can be retried, and an endpoint that creates an order, a booking, a reservation or a ticket will create a second one unless you stop it.
+Use a timing-safe comparison for signature values and verify against the raw request body rather than reconstructed JSON. A timestamp tolerance should also be enforced so a captured signed request cannot be replayed indefinitely.
 
-Use `x-mitu-request-id` as the idempotency key for anything Mitu delivers:
+## Prevent duplicate side effects
 
-1. Verify the signature.
-2. Read `x-mitu-request-id`.
-3. Look it up. If you have processed it, return the result you created the first time and stop.
-4. If it is new, do the work and persist the mapping before you respond.
+A forwarded request can be retried, so endpoints that create or modify state should handle the same `x-mitu-request-id` more than once without repeating the underlying action.
+
+For example, if a request creates an order, store the relationship between the Mitu request and the order you created:
 
 ```text
 req_abc123 -> order_8841
 ```
 
-A retry for `req_abc123` must resolve to `order_8841`, never create `order_8842`.
+If `req_abc123` arrives again, return the result associated with `order_8841` rather than creating another order.
 
-Persist the mapping in the same transaction that creates the resource. Writing the order first and the mapping afterwards leaves a window in which a retry arriving between the two creates a duplicate, which is the failure this check exists to prevent.
+Persist the idempotency record together with the business operation where possible. This avoids a race where the order is created successfully but the request ID has not yet been recorded when a retry arrives.
 
-<Note title="A different thing from the Idempotency-Key header">
-`x-mitu-request-id` deduplicates requests Mitu delivers **to you**. `Idempotency-Key`, which you send on calls to the Mitu API, deduplicates requests **you** make. They run in opposite directions and neither replaces the other.
+<Note title="Two idempotency directions">
+  `x-mitu-request-id` helps you deduplicate requests Mitu sends to your API. `Idempotency-Key` is used when your backend sends supported requests to the Mitu API.
+
+  They protect different request directions and should not be treated as the same identifier.
 </Note>
 
-## Rotating the secret
+## Customer authentication is separate
 
-Rotation is immediate and total. Every request signed after it fails verification until your backend holds the new secret. There is no overlap window, so deploy the new secret and rotate in the order that suits your release process.
+A verified request can also carry customer identity when the AI agent is acting on behalf of a known customer. If OAuth is being used, the customer's access token can be forwarded so your backend continues applying its existing authentication and authorisation rules.
 
-{/* SCREENSHOT: docs/assets/platform/security/signing-secret.png
-     Caption: "The Integration page showing the signing secret and Rotate."
-     The secret itself must be masked. */}
+The Mitu signature proves where the request came from. The customer access token and your own backend rules determine what that customer is allowed to do.
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="Keys and secrets" icon="regular key" href="/platform/security/keys-and-secrets">
+    Understand the signing secret and other credentials used by your integration.
+  </Card>
+
+  <Card title="Authentication" icon="regular right-to-bracket" href="/platform/mcp/authentication">
+    Identify customers using customer keys or OAuth.
+  </Card>
+
+  <Card title="Agent payments" icon="regular credit-card" href="/platform/payments/agent-payments">
+    Understand payment-specific request context.
+  </Card>
+
+  <Card title="Webhooks" icon="regular webhook" href="/platform/webhooks/overview">
+    Verify webhook deliveries separately with a webhook secret.
+  </Card>
+</CardGroup>

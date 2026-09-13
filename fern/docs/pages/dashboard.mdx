@@ -1,5 +1,108 @@
 ---
 title: Keys and secrets
+subtitle: Understand the credentials used by your backend, your customers and Mitu.
 ---
 
-<Note>This page is being written. See the platform guide for the source material.</Note>
+Mitu uses different credentials for different parts of the platform. Keep them separate because each one identifies a different actor or verifies a different request direction.
+
+Your merchant API key authenticates your backend when it calls the Mitu API. Customer keys identify individual customers connecting through MCP. Request signing secrets let your backend verify requests forwarded by Mitu, while webhook secrets verify event deliveries.
+
+## Credential types
+
+| Credential | Example | Used by | Purpose |
+| --- | --- | --- | --- |
+| Merchant API key | `sk_test_...`, `sk_live_...` | Your backend | Authenticate server-side requests to the Mitu API. |
+| Customer key | `mcpk_...` | Customer or AI client | Identify one customer connecting through MCP. |
+| Request signing secret | `mps_...` | Your backend | Verify requests Mitu forwards to your API. |
+| Webhook secret | `whsec_...` | Your backend | Verify webhook deliveries sent by Mitu. |
+
+These credentials are not interchangeable. A customer key cannot administer your Mitu account, and a webhook secret should never be used to verify a forwarded MCP request.
+
+## Merchant API keys
+
+Merchant API keys are server-side credentials used when your backend calls the Mitu API.
+
+```text
+sk_test_...
+sk_live_...
+```
+
+Use test keys for development and live keys for production. Keep merchant API keys in secure server-side configuration and never include them in browser code, mobile applications, public repositories or AI client configuration.
+
+Merchant API keys can be used for operations available to your business account, so they should be treated as highly sensitive credentials.
+
+## Customer keys
+
+Customer keys use the `mcpk_...` prefix and belong to individual customer records. They are used when a customer connects to MCP using customer-key authentication instead of OAuth.
+
+```text
+mcpk_...
+```
+
+A customer key identifies one customer. It does not replace your merchant API key, cannot administer your business account and should only be provided to the customer it belongs to.
+
+See [Customer keys](/platform/customers/customer-keys) for the customer-key lifecycle.
+
+## Request signing secrets
+
+A request signing secret uses the `mps_...` prefix and is issued for your integration. Your backend uses it to verify that a request sent to one of your API endpoints came through Mitu.
+
+```text
+mps_...
+```
+
+The signing secret is not sent with each request. Mitu uses it to produce the request signature, and your backend independently calculates the expected signature using the same secret.
+
+See [Request verification](/platform/security/request-verification) for the verification process.
+
+## Webhook secrets
+
+Webhook secrets use the `whsec_...` prefix and belong to webhook endpoints. They are used to verify webhook deliveries rather than MCP-forwarded requests.
+
+```text
+whsec_...
+```
+
+If you configure multiple webhook endpoints and each receives its own secret, verify each delivery using the secret associated with the endpoint that received it.
+
+See [Webhooks](/platform/webhooks/overview) for webhook verification and retry handling.
+
+## Store secrets securely
+
+Keep all server-side credentials in a secrets manager or secure environment configuration rather than hard-coding them into your application. Restrict access to the services and team members that genuinely need each credential and keep production secrets separate from development environments.
+
+Never log complete API keys or signing secrets. If you display credentials in internal tooling, mask most of the value so logs, screenshots and support conversations do not accidentally become another place where sensitive credentials are stored.
+
+## Rotate compromised credentials
+
+Rotate a credential when you believe it may have been exposed. After rotation, update the corresponding server configuration before relying on the new credential for production traffic.
+
+Because different credentials protect different parts of the platform, rotate only the affected credential unless there is reason to believe others were also exposed. A leaked webhook secret, for example, does not automatically require replacing every customer key.
+
+Plan rotation as a deployment step rather than assuming an overlap period. Update your configuration and confirm the new credential is in place so verification continues to succeed for traffic that arrives immediately after the change.
+
+## Test and live environments
+
+Keep test and production credentials separate. A test key should only be used with test resources and development integrations, while a live key should only be available to production systems that require it.
+
+Do not reuse production credentials in local development simply because it is convenient. Environment separation reduces the impact of accidental logging, misconfiguration and test code performing operations against live resources.
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="Request verification" icon="regular shield-check" href="/platform/security/request-verification">
+    Verify requests Mitu forwards to your API.
+  </Card>
+
+  <Card title="Webhooks" icon="regular webhook" href="/platform/webhooks/overview">
+    Verify webhook deliveries using a webhook secret.
+  </Card>
+
+  <Card title="Customer keys" icon="regular key" href="/platform/customers/customer-keys">
+    Understand the customer credential used for MCP access.
+  </Card>
+
+  <Card title="Authentication" icon="regular right-to-bracket" href="/platform/mcp/authentication">
+    Choose between customer keys and OAuth.
+  </Card>
+</CardGroup>

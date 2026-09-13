@@ -1,41 +1,75 @@
 ---
 title: Webhooks
-subtitle: How Mitu delivers events to your backend, and how to verify and deduplicate them.
+subtitle: Receive events from Mitu and process them safely in your backend.
 ---
 
-Add an endpoint, choose which events it should receive, and Mitu delivers to it. [Events](/platform/webhooks/events) lists what can be sent.
+Webhooks let your backend react when activity happens in Mitu. Add a webhook endpoint, choose the events you want to receive and process each delivery in your own application as it arrives.
 
-## Signing
+Webhook delivery is separate from requests Mitu forwards to your API on behalf of an AI agent. Webhooks notify your application that something has happened, while forwarded API requests are part of an agent using one of your product capabilities.
 
-Each webhook endpoint gets its own secret, `whsec_...`.
+See [Events](/platform/webhooks/events) for the event types and payloads available.
+
+## Configure a webhook endpoint
+
+Create a webhook endpoint in the dashboard and provide the HTTPS URL that should receive deliveries. Each endpoint has its own webhook signing secret with the `whsec_...` prefix, which your backend uses to verify that incoming webhook requests were sent by Mitu.
+
+Only subscribe an endpoint to the events your application needs. This keeps your handler focused and avoids processing unrelated activity.
+
+## Verify webhook deliveries
+
+Every webhook request includes a signature header that your backend should verify before processing the event body.
 
 ```http
 X-Mitu-Signature: v1,t=1788990420,sig=<hmac-sha256>
 Content-Type: application/json
 ```
 
-<Warning title="Two secrets, two directions">
-`whsec_...` signs webhook deliveries Mitu sends to you. `mps_...`, described on [request signature verification](/platform/security/request-verification), signs requests Mitu makes to your API on an agent's behalf. They are different secrets for opposite directions, and each endpoint's deliveries must be verified with that endpoint's own secret.
+The webhook secret belongs to the webhook endpoint that received the delivery. Keep it on your server and never expose it to browsers, mobile applications or AI clients.
+
+<Warning title="Webhook secrets and request signing secrets are different">
+  `whsec_...` verifies webhook deliveries sent to your webhook endpoint. `mps_...` verifies requests Mitu forwards to your API when an AI agent uses one of your capabilities.
+
+  They protect different request flows and should not be used interchangeably. See [Request verification](/platform/security/request-verification) for forwarded API requests.
 </Warning>
 
-## Delivery and retries
+## Handle retries safely
 
-Mitu attempts a delivery up to five times, with backoff. Every attempt carries the same `event_id`, because a retry is the same event arriving again rather than a new one.
+Webhook delivery can be retried when your endpoint does not acknowledge an event successfully. A retry represents another delivery attempt for the same event rather than a new event, so every attempt keeps the same `event_id`.
+
+Store processed event IDs and check them before applying side effects. This prevents the same event from creating duplicate records, sending repeated notifications or updating your state more than once.
 
 ```text
-Deduplicate on event_id.
+evt_h9x2ez72ichll2ti80cc
 ```
 
-Answer `2xx` to acknowledge. Anything else counts as a failure and is retried. After the final attempt the delivery is abandoned, and you can resend it by hand from the dashboard.
+Return a successful `2xx` response after your application has accepted the event. Responses outside the successful range are treated as failed deliveries and can be retried.
 
-## Testing
+If the current delivery policy remains five attempts with backoff, document that behaviour in your operational reference. Keep your application safe against duplicate delivery even if the retry schedule changes later.
 
-The Test button sends a real delivery, recorded in the log like any other, so what you test is what production sends.
+## Process events before responding
 
-{/* SCREENSHOT: docs/assets/platform/webhooks/endpoint.png
-     Caption: "A webhook endpoint: subscribed events, secret and recent
-     deliveries." The secret must be masked. */}
+Verify the signature and determine whether the event has already been processed before applying the event to your system. For operations that must not be duplicated, persist the `event_id` together with the state change it causes.
 
-## Logs
+If processing requires long-running work, acknowledge the webhook after safely recording the event and continue the heavier work asynchronously. Your endpoint should not rely on a long HTTP connection remaining open while downstream work completes.
 
-Every attempt is recorded with its status and response, so a delivery that failed can be inspected rather than guessed at. See [keys, secrets and logs](/platform/security/keys-and-secrets).
+## Test your endpoint
+
+Use the dashboard test capability to send a webhook delivery to your configured endpoint before relying on it in production. Process test deliveries through the same verification and event-handling code you use for normal webhook traffic so you are testing the actual integration rather than a separate development path.
+
+Webhook delivery attempts should also be visible in the dashboard so you can inspect whether a request succeeded, failed or needs to be retried.
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="Events" icon="regular bell" href="/platform/webhooks/events">
+    See the event types and payloads Mitu can send.
+  </Card>
+
+  <Card title="Request verification" icon="regular shield-check" href="/platform/security/request-verification">
+    Verify requests Mitu forwards to your API.
+  </Card>
+
+  <Card title="Keys and secrets" icon="regular key" href="/platform/security/keys-and-secrets">
+    Understand the credentials used across your integration.
+  </Card>
+</CardGroup>

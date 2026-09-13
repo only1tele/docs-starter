@@ -1,36 +1,53 @@
 ---
 title: Events
-subtitle: Everything Mitu can tell your backend, and the payloads it sends.
+subtitle: Understand the events Mitu can send to your backend and the data they contain.
 ---
 
-Every event shares one envelope:
+Events describe activity that has already happened in Mitu. Your application can receive them through webhooks to update internal records, notify customers, reconcile payments or react to wallet activity.
+
+Every event uses the same top-level envelope. The contents of `event_data` depend on the event type.
 
 ```json
 {
   "event": "wallet.debited",
   "event_id": "evt_h9x2ez72ichll2ti80cc",
   "event_created_at": "2026-09-11T18:01:41.255Z",
-  "event_data": { }
+  "event_data": {}
 }
 ```
 
-Only the fields that apply to an event are sent. On payment events, `source` says which shape to expect: a payment from a link carries no `service_id`, and one from an MCP endpoint carries no `payment_link_id`.
+### Event envelope
 
-Anything naming a customer carries both ids. `customer_id` is Mitu's, and `customer_ref` is yours, from the `client_reference_id` you set.
+| Field | Type | Description |
+| --- | --- | --- |
+| `event` | `string` | The event type, such as `payment.completed` or `wallet.credited`. |
+| `event_id` | `string` | The unique event identifier. Use it to deduplicate webhook deliveries. |
+| `event_created_at` | `string` | When the event was created. |
+| `event_data` | `object` | Event-specific data associated with the activity. |
 
-## Two groups
+When customer context is present, `customer_id` identifies the Mitu customer and `customer_ref` carries the reference associated with that customer in your own system.
 
-`payment.*` events mean **you are being paid**. An agent paid for a call, a link or an invoice, and the money is now yours.
+## Event categories
 
-`wallet.*` events belong to **wallets you issue**. The money is your customer's and you are the operator, not the payee.
+The main distinction is between money your business receives and money belonging to customers through Agent Wallets.
 
-A merchant may run either or both. An agent paying an endpoint from its own funds raises `payment.completed` and no wallet event. One of your wallet customers paying somebody else raises `wallet.debited` and no payment event. Only when your own wallet customer pays you do both fire, describing the two sides of one movement.
+`payment.*` events describe payments received by your business. `wallet.*` events describe activity on Agent Wallets issued to customers. These are separate perspectives on money movement and should not be treated as interchangeable.
 
-## payment.completed
+| Category | Events |
+| --- | --- |
+| Customers | `customer.created` |
+| Agent Wallets | `wallet.created`, `wallet.credited`, `wallet.debited` |
+| Payments | `payment.completed`, `payment.failed` |
+| Payment links | `link.created`, `link.viewed` |
+| Sessions | `session.opened`, `session.closed` |
+| Invoices | `invoice.created`, `invoice.sent`, `invoice.paid` |
+| Subscriptions | `plan.created`, `subscription.created`, `subscription.charged`, `subscription.past_due`, `subscription.cancelled` |
 
-Fires when you are paid.
+## `payment.completed`
 
-```json title="source: mcp"
+`payment.completed` is emitted when your business successfully receives a payment.
+
+```json
 {
   "event": "payment.completed",
   "event_id": "evt_er5sbax1m3vitp5d6thi",
@@ -54,7 +71,9 @@ Fires when you are paid.
 }
 ```
 
-`delivered` says whether your endpoint served the paid call. `false` arrives with `failure_status`, the status your endpoint answered with:
+The fields present depend on the source of the payment. For example, an MCP payment can include endpoint information, while a payment created through a payment experience can include the corresponding payment resource instead.
+
+`delivered` indicates whether the paid request was successfully fulfilled by your API after payment. A completed payment and successful fulfilment are separate states, so `delivered: false` can mean your business has received the money even though the downstream operation did not complete successfully.
 
 ```json
 {
@@ -63,13 +82,11 @@ Fires when you are paid.
 }
 ```
 
-You are paid before your endpoint is called, so `delivered: false` means you are holding money for work that was not done. See [paid but not delivered](/platform/payments/agent-payments).
+See [Agent payments](/platform/payments/agent-payments) for handling payments where settlement completed but fulfilment did not.
 
-The customer fields are present only when the payer is a known Mitu customer. An agent paying from its own funds has no customer record, and their absence is normal.
+## `payment.failed`
 
-## payment.failed
-
-Fires when a payment was attempted and did not complete.
+`payment.failed` is emitted when a payment attempt does not complete successfully.
 
 ```json
 {
@@ -94,11 +111,17 @@ Fires when a payment was attempted and did not complete.
 }
 ```
 
-`reason` is one of `no_supported_method`, `insufficient_balance`, `over_limit`, `settlement_failed` or `upstream_rejected`.
+| Reason | Meaning |
+| --- | --- |
+| `no_supported_method` | No supported payment method could be used. |
+| `insufficient_balance` | The payer did not have enough available balance. |
+| `over_limit` | The payment could not proceed within the applicable spending controls. |
+| `settlement_failed` | The underlying payment settlement did not complete. |
+| `upstream_rejected` | The upstream payment operation was rejected. |
 
-## wallet.created
+## `wallet.created`
 
-Raised once per wallet, when you create one.
+`wallet.created` is emitted when an Agent Wallet is created for a customer.
 
 ```json
 {
@@ -118,19 +141,28 @@ Raised once per wallet, when you create one.
       "currency": "USD"
     },
     "addresses": [
-      { "network": "base", "address": "0xa90818aeC6..." },
-      { "network": "tempo", "address": "0xa90818aeC6..." },
-      { "network": "solana", "address": "7U6P9CrM7C..." }
+      {
+        "network": "base",
+        "address": "0xa90818aeC6..."
+      },
+      {
+        "network": "tempo",
+        "address": "0xa90818aeC6..."
+      },
+      {
+        "network": "solana",
+        "address": "7U6P9CrM7C..."
+      }
     ]
   }
 }
 ```
 
-Limits are USD while the balance is USDC, so the object says which. Creating a wallet with a name that already exists returns the existing one and announces nothing, so this event is not a reliable signal that a create call was made, only that a wallet came into existence.
+This event describes a wallet that has come into existence. Wallet creation is idempotent, so a repeated creation request that returns an existing wallet does not raise another `wallet.created` event.
 
-## wallet.credited
+## `wallet.credited`
 
-A deposit landed.
+`wallet.credited` is emitted when funds are credited to an Agent Wallet and become part of its available balance.
 
 ```json
 {
@@ -151,11 +183,11 @@ A deposit landed.
 }
 ```
 
-`balance_after` is that wallet alone, not everything the customer holds.
+`balance_after` represents the balance of that Agent Wallet rather than a combined balance across every wallet belonging to the customer.
 
-## wallet.debited
+## `wallet.debited`
 
-Money left a wallet you issued.
+`wallet.debited` is emitted when funds leave an Agent Wallet.
 
 ```json
 {
@@ -181,17 +213,16 @@ Money left a wallet you issued.
 }
 ```
 
-`reason` is `payment`, `withdrawal` or `reversal`. `destination.type` is `merchant`, in which case `name` is set, or `external`, in which case it is not.
+| Field | Values |
+| --- | --- |
+| `reason` | `payment`, `withdrawal`, `reversal` |
+| `destination.type` | `merchant`, `external` |
 
-### Joining the two sides
+When one of your own Agent Wallet customers pays your business, a `wallet.debited` event describes the wallet side while `payment.completed` describes the payment received by your business. Treat them as separate event records representing different sides of the same movement, and use `tx_hash` when you need to associate the two. Their `transaction_id` values differ because each event identifies a record in a different system.
 
-`payment.completed` and `wallet.debited` describe one movement from two sides. Join them on **`tx_hash`**, which is the on-chain settlement and identical on both.
+## Payment link events
 
-Do not join on `transaction_id`. Each event names the record in the system that raised it, the request on one side and the wallet movement on the other, and they are different rows with different values.
-
-## Payment link, invoice and subscription events
-
-`link.created` carries the link, your `reference`, and both entry points:
+`link.created` is emitted when a payment link is created and can include the reference and payer entry points associated with the link.
 
 ```json
 {
@@ -213,42 +244,34 @@ Do not join on `transaction_id`. Each event names the record in the system that 
 }
 ```
 
-`link.viewed` fires when somebody opens the checkout page, carrying the link, your `reference` and `viewed_at`.
+`link.viewed` can be used when your application needs to know that a hosted checkout was opened.
 
-`session.opened` carries the `session_id`, `max_deposit`, the `deposit` actually locked, the on-chain `channel_id` and the `tx_hash`. `session.closed` carries `spent_amount`, `refunded_amount` and its own `tx_hash`.
+## Invoice and subscription events
 
-Invoices emit `invoice.created`, `invoice.sent` and `invoice.paid`. Subscriptions emit `plan.created`, `subscription.created`, `subscription.charged`, `subscription.past_due` and `subscription.cancelled`.
+Invoices and subscriptions have their own lifecycle events so your backend can react to billing state changes without polling every resource continuously.
 
-<Note title="Declared but not yet emitted">
-`invoice.viewed`, `invoice.overdue`, `refund.completed`, `settlement.completed` and `customer.status.changed` exist as event types, but nothing in the current implementation raises them. Do not build a flow that waits on one. Derive an overdue invoice from `dueAt` and its paid state, and reconcile payouts against `payment.completed`.
+| Resource | Events |
+| --- | --- |
+| Invoices | `invoice.created`, `invoice.sent`, `invoice.paid` |
+| Subscriptions | `plan.created`, `subscription.created`, `subscription.charged`, `subscription.past_due`, `subscription.cancelled` |
+| Sessions | `session.opened`, `session.closed` |
+
+<Note title="Events not currently emitted">
+  `invoice.viewed`, `invoice.overdue`, `refund.completed`, `settlement.completed` and `customer.status.changed` exist in the underlying event model but are not currently emitted. Do not build application logic that depends on an event until it is listed as supported in this documentation.
 </Note>
 
-## The rest
+## Related
 
-```text
-CUSTOMER
-  customer.created            a customer now exists, by API or by sign-in
+<CardGroup cols={2}>
+  <Card title="Webhooks" icon="regular bell" href="/platform/webhooks/overview">
+    Configure delivery, verification and retry handling.
+  </Card>
 
-WALLET
-  wallet.created              a wallet, its name, limits and addresses
-  wallet.credited             a deposit landed
-  wallet.debited              money left
+  <Card title="Agent payments" icon="regular credit-card" href="/platform/payments/agent-payments">
+    Understand the payment lifecycle behind payment events.
+  </Card>
 
-PAYMENT
-  payment.completed
-  payment.failed
-
-LINKS AND PLANS
-  link.created
-  link.viewed
-  plan.created
-  subscription.created
-  subscription.charged
-  subscription.past_due
-  subscription.cancelled
-  session.opened
-  session.closed
-  invoice.created / sent / viewed / paid / overdue
-```
-
-[Webhooks](/platform/webhooks/overview) covers how these are delivered, signed and retried.
+  <Card title="Agent Wallets" icon="regular wallet" href="/platform/agent-wallets/overview">
+    Understand the wallet resources behind wallet events.
+  </Card>
+</CardGroup>
