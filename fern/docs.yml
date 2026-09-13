@@ -2,6 +2,7 @@
 
 instances:
   - url: mitu.docs.buildwithfern.com
+    custom-domain: docs.mitu.ai
     # custom-domain: docs.mitu.ai
 
 title: Mitu API Documentation
