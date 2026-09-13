@@ -1,45 +1,45 @@
 ---
 title: Limits and controls
-subtitle: What a wallet may spend, and what applies to the customer as a whole.
+subtitle: Configure how much an Agent Wallet can spend and when additional approval is required.
 ---
 
-Three controls are carried on a wallet. All amounts are in USD, while the balance itself is USDC, which is why the limits object says which currency it is in.
+Spending controls let you define how an Agent Wallet should be used without giving an AI agent unrestricted access to the customer's funds. Controls are configured on individual wallets, while account-level restrictions such as a customer freeze can apply across every wallet belonging to that customer.
 
-<ParamField path="monthly" type="number">
-  The most this wallet may spend in a calendar month, across every payment. A payment that would take the wallet past it is held for the customer to approve rather than refused.
-</ParamField>
+Wallet balances are held in USDC, while spending limits are represented in the currency specified by the limits configuration. The current wallet model supports `monthly`, `per_payment` and `approve_above`, although their enforcement behaviour is not currently the same.
 
-<ParamField path="per_payment" type="number">
-  The intended ceiling for a single payment. Stored and returned, but not currently read by the payment path.
-</ParamField>
+## Wallet controls
 
-<ParamField path="approve_above" type="number">
-  The intended threshold above which a payment should wait for the customer. Stored and returned, but not currently read by the payment path.
-</ParamField>
+| Control | Type | Current behaviour |
+| --- | --- | --- |
+| `monthly` | `number` | Limits how much the wallet can spend during a calendar month. Currently enforced by the payment flow. |
+| `per_payment` | `number` | Configures the intended maximum for an individual payment. Stored and returned, but not currently enforced by the payment flow. |
+| `approve_above` | `number` | Configures the intended threshold for customer approval. Stored and returned, but not currently enforced by the payment flow. |
 
-<Warning title="Only the monthly limit currently gates a payment">
-`monthly` is the control that changes what happens today. `per_payment` and `approve_above` are accepted on create, stored, and returned on the wallet and on `wallet.created`, but nothing in the payment path reads them yet. Do not present either to your customers as an enforced control until that changes.
+<Warning title="Current enforcement">
+  `monthly` is currently the spending control enforced by the payment flow. `per_payment` and `approve_above` can be configured and are returned with the wallet, but they are not currently enforced when a payment is made. Do not present those two controls to customers as enforced spending restrictions until support is available.
 </Warning>
 
-## What happens at the limit
+## Monthly limit
 
-Exceeding the monthly limit does not fail the payment. Mitu holds it, raises an approval request for the customer, and the agent's `pay` tool answers `pending_approval` with the amount rather than a settlement. The payment proceeds if the customer approves it.
+The `monthly` control defines how much a wallet can spend during a calendar month across its payments. When a payment would take the wallet beyond the configured monthly amount, Mitu does not automatically complete the payment. The payment is held for customer approval instead, allowing the person who owns the funds to decide whether that payment should proceed.
 
-## Zero means no limit
+If approval is required, the agent receives a pending approval result rather than a successful payment result. The payment can continue after the customer approves it, keeping the customer involved when spending would move outside the normal wallet allowance.
 
-Zero is not a limit of zero. A control set to zero is off, and that amount is unbounded. To stop a wallet spending, freeze the customer rather than setting a limit to zero.
+## Zero and omitted controls
 
-Limits you omit when creating a wallet are inherited from the limits that customer already has. Omitted does not mean unlimited either.
+A control set to `0` is disabled rather than interpreted as a spending limit of zero. If you need to prevent a customer from spending entirely, use the appropriate customer-level restriction instead of relying on a zero wallet limit.
 
-## Per wallet, per customer
+An omitted control is also different from explicitly setting a control to zero. When a wallet is created without a particular limit, that value can be inherited from the controls already configured for the customer. Your integration should therefore treat omitted, zero and positive values as distinct configurations.
 
-Limits are per wallet. A freeze, or a blocked destination, is per customer and applies everywhere they spend.
+## Wallet and customer controls
 
-That split is deliberate, and the dashboard reflects it: the customer's status sits above the wallet switcher and the limits below it, because one belongs to the person and the others to the pot.
+Wallet limits apply to the individual wallet they are configured on. A customer with separate `Travel` and `Office` wallets can therefore have different spending configurations for each balance, allowing each wallet to reflect its intended purpose.
 
-## Examples
+Customer-level restrictions apply more broadly. A customer freeze or blocked destination can affect spending across the customer's wallets rather than changing only one wallet. This distinction lets you use wallet controls for individual spending pots while retaining account-level controls for restrictions that should apply to the customer as a whole.
 
-These are illustrative configurations, not recommended figures. What is right depends on what the wallet is for.
+## Example configurations
+
+The following configurations illustrate how different wallets can carry different controls. The amounts are examples rather than recommended limits, and you should choose values appropriate for your product and customers.
 
 ```json title="Everyday spending"
 {
@@ -57,4 +57,24 @@ These are illustrative configurations, not recommended figures. What is right de
 }
 ```
 
-A wallet whose `approve_above` is below its `per_payment` will hold larger payments for approval rather than refusing them. A wallet whose `approve_above` is above `per_payment` will never hold anything, because everything large enough to need approval is refused first.
+Because `per_payment` and `approve_above` are not currently enforced by the payment flow, these examples describe stored wallet configurations rather than guarantees about payment behaviour. Until enforcement is available, `monthly` is the control that currently changes whether a payment can proceed without additional approval.
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="Agent Wallets" icon="regular wallet" href="/platform/agent-wallets/overview">
+    Create wallets and understand their ownership model.
+  </Card>
+
+  <Card title="Multiple wallets" icon="regular layer-group" href="/platform/agent-wallets/multiple-wallets">
+    Configure separate balances and controls for different purposes.
+  </Card>
+
+  <Card title="Wallet tools" icon="regular wrench" href="/platform/agent-wallets/wallet-tools">
+    Understand how AI agents interact with Agent Wallets.
+  </Card>
+
+  <Card title="Funding" icon="regular arrow-down-to-line" href="/platform/agent-wallets/funding">
+    Understand how customers add funds to their wallets.
+  </Card>
+</CardGroup>

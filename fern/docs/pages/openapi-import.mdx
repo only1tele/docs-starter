@@ -1,62 +1,63 @@
 ---
 title: OpenAPI import
-subtitle: Create endpoints from a document you already maintain, rather than adding operations by hand.
+subtitle: Create MCP endpoint definitions from an OpenAPI document you already maintain.
 ---
 
-If your API has an OpenAPI document, import it. Mitu parses it and creates one endpoint per operation, with the schemas attached.
+If your API already has an OpenAPI document, you can use it as the starting point for your MCP configuration instead of creating every endpoint and schema manually. Mitu reads the operations in the document and creates endpoint definitions using the routing, descriptions and schemas that are already available.
 
-```text
-Upload the document
-        |
-Mitu parses the operations
-        |
-One endpoint per operation, with schemas
-        |
-You review, edit and choose what to publish
-```
+Importing is a starting point rather than an automatic publishing step. An OpenAPI document describes an API for developers, while an MCP tool definition also needs to help an AI model decide whether and when an operation should be called.
 
-## What Mitu derives
+## What can be imported
 
-```text
-path            from the operation
-method          from the operation
-name            from the operation id or summary
-description     from the operation description
-input_schema    from parameters and the request body
-output_schema   from the success response
-```
+The importer can derive much of the technical contract directly from the OpenAPI operation.
 
-## What it cannot derive
+| MCP field | OpenAPI source |
+| --- | --- |
+| `path` | Operation path |
+| `method` | HTTP operation |
+| `name` | Operation identifier or available operation metadata |
+| `description` | Operation description |
+| `input_schema` | Parameters and request body |
+| `output_schema` | Response schema |
 
-An OpenAPI document is written for a developer reading a reference. A tool definition is read by a model choosing between tools. They overlap, but they are not the same document, and two fields almost always need a pass afterwards.
+Review each imported endpoint before making it available to AI clients. The imported technical shape may be correct even when the resulting tool name or description needs to be made clearer for an agent.
 
-**`when_to_use` is not in OpenAPI at all.** There is no field for it, so it arrives empty. It is also the field that most affects whether a model picks the right tool, so leaving it empty gives up the largest part of the benefit.
+## Add agent-specific guidance
 
-**Pricing is not in OpenAPI either.** Every imported endpoint starts free. Set `pricing_type` on anything that should charge.
+Some MCP configuration cannot be derived reliably from an OpenAPI specification. In particular, your OpenAPI document does not normally explain the circumstances in which an AI model should choose one operation over another.
 
-A `summary` of "Create booking" is accurate and tells a model nothing it could not guess from the name. [Endpoints](/platform/mcp/endpoints) covers what a good description does instead.
+Add `when_to_use` guidance to the endpoints where sequencing or context matters. For example, a `create_booking` operation might explain that it should only be used after the customer has confirmed the location, date, time and party size.
 
-## Review before publishing
+Pricing also needs to be reviewed separately. Decide which imported operations should remain free and configure the appropriate pricing model for operations the agent should pay to use.
 
-Importing a whole document usually produces more tools than an agent should see. Registering every operation you serve makes it more likely one gets called that should not have been.
+See [Endpoints](/platform/mcp/endpoints) for writing tool descriptions and [Pricing](/platform/payments/pricing) for paid operations.
 
-```text
-Remove what agents should not call
-Set is_public: false on anything staged
-Set requires_auth where the operation touches an account
-Write when_to_use on everything that survives
-Price what should charge
-```
+## Review what should be published
 
-A channel with four well-described tools is more useful than one with forty a model cannot choose between.
+An API specification often contains more operations than an AI agent should have access to. Internal administration endpoints, maintenance operations and routes intended only for other backend services may all be valid parts of your OpenAPI document without being appropriate MCP tools.
+
+Review the imported set and keep only the operations that serve a meaningful customer or agent workflow. For each endpoint you keep, confirm its authentication requirements, description, usage guidance, schemas and pricing before making it available.
+
+A focused set of well-defined tools is easier for an AI model to use correctly than a large collection of overlapping or irrelevant operations.
+
+## Keep OpenAPI and MCP aligned
+
+If OpenAPI is the source of truth for your API contract, keep it current as request and response shapes change. Revisit the corresponding MCP endpoints when those changes affect tool arguments, output schemas or behaviour an AI agent needs to understand.
+
+The imported schema can describe the technical contract, while the MCP-specific fields provide the additional context needed for good tool selection.
 
 ## Related
 
 <CardGroup cols={2}>
   <Card title="Endpoints" icon="regular list-check" href="/platform/mcp/endpoints">
-    The full endpoint record.
+    Review and configure imported operations.
   </Card>
+
   <Card title="Tool schemas" icon="regular brackets-curly" href="/platform/mcp/tool-schemas">
-    Making the schemas work for a model.
+    Understand how request and response schemas are presented to AI agents.
+  </Card>
+
+  <Card title="Pricing" icon="regular tag" href="/platform/payments/pricing">
+    Configure pricing for imported operations.
   </Card>
 </CardGroup>

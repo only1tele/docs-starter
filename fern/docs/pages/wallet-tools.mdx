@@ -1,88 +1,84 @@
 ---
 title: Wallet tools
-subtitle: The four tools a customer's agent gets once Mitu knows who is connected, and the boundary around them.
+subtitle: Wallet capabilities available to an AI agent acting on behalf of a connected customer.
 ---
 
-Wallet tools appear alongside your own endpoint tools, for the customer the connection is authenticated as. A connection with no identified customer gets none of them, and a customer with no wallet has nothing for them to report.
+Wallet tools let an AI agent work with Agent Wallets belonging to the customer it is acting for. Once the AI client is connected as a customer, the agent can inspect available wallets, check balances, retrieve funding information and use an eligible wallet when a payment needs to be completed.
 
-## list_wallets
+These tools are deliberately limited to the capabilities an agent needs for spending. They do not give the agent administrative control over the customer's wallets or funds, and they are only available in the context of the customer represented by the connection.
 
-No arguments. Returns the names of the wallets that customer holds.
+## `list_wallets`
 
-Names only. The wallet id is not returned, because a wallet is chosen by name everywhere else in these tools and printing the id invites a model to pass it back as though it were the label the customer uses. Nothing is added to the list either: a name that cannot be paid from is how an agent ends up asking for a wallet the customer does not have.
+Returns the Agent Wallets available to the connected customer. Use this when the agent needs to understand which wallets the customer has before checking a balance or deciding which wallet should be used for a payment.
 
-## get_balance
+This tool does not create wallets or make a wallet available to a customer who has not been issued one. If the connected customer has no Agent Wallets, the result should be treated as a valid account state rather than an error.
 
-<ParamField path="wallet" type="string">
-  Wallet name. Omit to see every wallet.
-</ParamField>
+## `get_balance`
 
-Returns the balance, summed across networks.
+Returns the available balance for one or more of the connected customer's Agent Wallets.
 
-Omitting the name with several wallets returns all of them rather than an error. Reading is not the dangerous operation: a balance is a question with a complete answer, and it is paying from the wrong pot that does damage.
+| Parameter | Type | Required | Description |
+| --- | --- | --- | --- |
+| `wallet` | `string` | No | The wallet name to inspect. Omit it to retrieve balances across the customer's available wallets. |
 
-## get_address
+When the customer has several wallets and no name is provided, the tool can return their balances together rather than forcing the agent to choose one. Reading balances does not move money, so showing the available balances does not create the same risk as selecting a wallet for payment.
 
-<ParamField path="wallet" type="string">
-  Wallet name. Omit if the customer only has one.
-</ParamField>
+## `get_address`
 
-Returns where to send funds, labelled by chain:
+Returns the funding information for an Agent Wallet so the customer can add funds using a supported network.
 
-```text
-base: 0xd7Ca1fdA...
-tempo: 0xd7Ca1fdA...
-solana: 3c6SpTNK...
-```
+| Parameter | Type | Required | Description |
+| --- | --- | --- | --- |
+| `wallet` | `string` | Conditional | The wallet name. It can be omitted when the customer has only one wallet. |
 
-Labelled rather than handed over as one bare string, because an address does not say what it can receive. Base and Tempo share the EVM address and Solana's is different, and USDC sent on a chain an address cannot receive on is not recoverable.
+The result associates each funding address with the network it supports. Base and Tempo can share an EVM address, while Solana uses a different address, so applications and agents should preserve the network label rather than presenting a funding address without context.
 
-## pay
+See [Funding](/platform/agent-wallets/funding) for supported funding methods and when deposited funds become available.
 
-<ParamField path="endpoint" type="string" required={true}>
-  A path on your own service, as named in the 402. For example `/orders`.
-</ParamField>
+## `pay`
 
-<ParamField path="method" type="string" default="GET">
-  The HTTP method.
-</ParamField>
+The `pay` tool lets an AI agent complete a payment using an Agent Wallet belonging to the connected customer. When the agent reaches a point in a larger workflow where payment is required, it receives a payment URL and passes that payment to Mitu. Mitu checks the selected wallet, available balance and applicable controls before completing the payment when it is permitted.
 
-<ParamField path="body" type="object">
-  The request body, where the method takes one.
-</ParamField>
+The AI agent does not need to implement x402 or MPP, hold wallet keys or construct a payment transaction itself. The wallet remains under the customer's ownership while Mitu handles the payment using the capabilities the customer has been given.
 
-<ParamField path="wallet" type="string">
-  Wallet name. Omit if the customer only has one.
-</ParamField>
+<Note title="Current pay schema">
+  See the current `pay` tool schema for the exact supported arguments. Do not build against the older endpoint-based form that accepted an API path, HTTP method and request body.
+</Note>
 
-Checks the balance and the spending limits, settles, and returns what your endpoint answered.
+When the customer has several wallets, the payment needs to identify which wallet the customer intends to use. Mitu does not silently switch to another wallet when a wallet name is missing or unrecognised because doing so could spend money from a balance the customer did not choose.
 
-<Warning title="The destination is a path, not a URL">
-`pay` takes a path on the merchant this connection belongs to, and Mitu builds the URL. An agent cannot point it anywhere else. A tool that paid an arbitrary address supplied by a model would be one a prompt injection could aim wherever it liked, and it reads to every client-side safety check as exactly that.
-</Warning>
+See [Build agents that can pay](/guides/use-cases/agent-purchasing) for the end-to-end purchasing flow and [Agent payments](/platform/payments/agent-payments) for the underlying payment lifecycle.
 
-A payment that would take the wallet past its monthly limit is not refused outright. It is held, an approval request is raised for the customer, and the tool answers `pending_approval` with the amount.
+## Wallet selection
 
-A payment that settles but is then refused by your endpoint answers `settled_not_delivered`, which the agent must not report as "nothing was charged". See [paid but not delivered](/platform/payments/agent-payments).
+Wallet selection becomes important when a customer has more than one balance. With a single wallet, the agent can use that wallet without asking the customer to distinguish between several options. With multiple wallets, any operation that moves money should preserve the customer's choice rather than guessing which wallet should fund the payment.
 
-## Naming a wallet
+An unknown wallet name should not fall back to another wallet. The same principle applies when the customer has several wallets and the payment does not identify one clearly enough to determine their intent. Read-only operations such as checking balances can be more permissive because they do not move the customer's money.
 
-```text
-One wallet       the agent need not name it
-Several wallets  it must, for get_address and pay
-Unknown name     refused, with no fallback to a default
-```
+See [Multiple wallets](/platform/agent-wallets/multiple-wallets) for the selection rules.
 
-Refusing when no name is given is a safety property rather than a limitation. Choosing a pot on somebody's behalf is how money meant for travel buys office supplies. `get_balance` is the deliberate exception, because reading every balance harms nothing.
+## What an AI agent cannot do
 
-## What an agent cannot do
+Wallet tools give an agent spending capabilities rather than ownership or administrative control. An agent cannot create a new Agent Wallet, withdraw the customer's funds, move money between wallets or change the spending controls configured for a wallet. Those decisions remain with your business or the customer, depending on the operation.
 
-```text
-create a wallet
-move money between wallets
-withdraw
-change a spending limit
-pay from a wallet it was not given
-```
+This boundary means a customer can allow an AI agent to complete permitted payments without giving the model unrestricted control over the underlying funds. Even when an agent is using the wallet, the money and the wallet continue to belong to the customer.
 
-Each of those is a decision that belongs to you or to your customer. [Agent Wallets](/platform/agent-wallets/overview) covers where those decisions are made.
+## Related
+
+<CardGroup cols={2}>
+  <Card title="Agent Wallets" icon="regular wallet" href="/platform/agent-wallets/overview">
+    Understand wallet ownership and issuance.
+  </Card>
+
+  <Card title="Funding" icon="regular arrow-down-to-line" href="/platform/agent-wallets/funding">
+    Add funds to an Agent Wallet.
+  </Card>
+
+  <Card title="Multiple wallets" icon="regular layer-group" href="/platform/agent-wallets/multiple-wallets">
+    Understand wallet selection when a customer has several balances.
+  </Card>
+
+  <Card title="Build agents that can pay" icon="regular robot" href="/guides/use-cases/agent-purchasing">
+    Build an AI agent that completes payments using a customer's Agent Wallet.
+  </Card>
+</CardGroup>

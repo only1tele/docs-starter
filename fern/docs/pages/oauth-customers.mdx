@@ -1,58 +1,83 @@
 ---
 title: OAuth
-subtitle: What happens to the customer record when somebody signs in with your own identity provider.
+subtitle: Let customers connect AI clients using the accounts they already have with your product.
 ---
 
-With customer sign-in enabled, you do not create customers in advance. The record is made the first time somebody signs in.
+OAuth lets customers connect to your MCP experience using your existing sign-in system instead of requiring a separate customer key. The customer authenticates with the identity provider your product already uses, and Mitu associates that authenticated identity with a customer record.
 
-```text
-Customer adds your MCP URL to their client
-        |
-Client discovers the OAuth configuration
-        |
-Customer signs in with your identity provider
-        |
-Mitu receives the identity
-        |
-Mitu creates or maps the customer from sub
-        |
-customer.created
-        |
-You can now act on that customer, including issuing a wallet
-```
+This keeps your existing customer accounts at the centre of the relationship. Customers continue signing in through your product's identity system, while their AI client gains access to the capabilities you have made available through MCP.
 
-## The record that results
+## How OAuth customer identity works
 
-```json title="customer.created data"
+When an MCP-compatible AI client connects to an operation that requires authentication, the customer is directed through your existing OAuth sign-in flow. After authentication succeeds, Mitu uses the resulting identity to create or resolve the customer associated with that connection.
+
+The identity provider's stable subject identifier, `sub`, is used to associate subsequent sign-ins with the same underlying identity. This gives Mitu a customer record it can use when the AI agent acts on that person's behalf.
+
+The resulting customer can then be associated with other capabilities you choose to provide, such as Agent Wallets. Those capabilities remain separate from authentication and are not created simply because the customer signed in.
+
+## Customer records created through OAuth
+
+A customer arriving through OAuth uses the authenticated identity to establish the corresponding Mitu customer record. The identity provider's `sub` gives you a stable value that can map the Mitu customer back to the account your own application already knows.
+
+For example, customer creation activity associated with OAuth can identify the source and customer reference:
+
+```json
 {
   "source": "oauth",
-  "client_reference_id": "<oauth-sub>"
+  "client_reference_id": "auth0|68f3c2a1b9"
 }
 ```
 
-`client_reference_id` is populated from the identity provider's `sub`, so the Mitu customer maps back to the same user your own system knows. Store the pairing of that `sub` and the Mitu customer id if you will later act on the customer from your backend.
+Your application should continue using its own customer database as the source of truth for account information and permissions. The Mitu customer record exists so activity through MCP, Agent Wallets and other platform capabilities can be associated with that authenticated customer.
 
-## What this does not do
+## Existing authorisation still applies
 
-<Note title="Signing in does not create a wallet">
-A wallet exists only because you created one through the API. OAuth sign-in creates a customer and nothing more. Issuing a wallet remains an explicit merchant action, because a wallet costs real addresses to fund and splits a customer's money across pots.
+OAuth authentication identifies the customer but does not bypass your application's existing authorisation rules. When Mitu calls an operation that requires customer authentication, the signed-in customer's access token can be forwarded to your API so your backend can continue enforcing the same permissions, account state and entitlement checks it already uses for other clients.
+
+This means your AI integration does not need a separate customer-permission system. Your backend continues deciding what the signed-in customer is allowed to do, while Mitu provides the MCP connection and customer context used by the AI client.
+
+Customer authentication is also separate from [Request verification](/platform/security/request-verification). Your backend should verify that the request came through Mitu before trusting Mitu-specific request context, while the forwarded customer token is used for your existing customer authentication and authorisation.
+
+## OAuth does not create an Agent Wallet
+
+<Note title="Wallet issuance remains explicit">
+  Signing in through OAuth creates or associates the customer identity needed for the connection. It does not automatically create an Agent Wallet, balance or funding address. If the customer should have a wallet their AI agent can spend from, issue that wallet separately.
 </Note>
 
-No prior `POST /v1/customers` call is required or expected in this flow. Creating the customer yourself and then having the same person sign in through OAuth produces two records unless the `client_reference_id` you used already matches their `sub`.
+Keeping these operations separate means you can use OAuth with customers who only need access to your existing product capabilities as well as customers who later receive Agent Wallets.
+
+See [Agent Wallets](/platform/agent-wallets/overview) for wallet issuance and ownership.
+
+## API-created customers and OAuth
+
+Choose a consistent identity strategy when the same customer can be provisioned through your backend and also connect through OAuth. Your goal is for both paths to resolve to the same person rather than creating unrelated customer identities for a single account.
+
+If your product primarily uses OAuth for AI-client connections, you do not need to create every customer in advance simply so they can sign in. Allow the OAuth flow to establish the Mitu customer when the customer first connects, then use the resulting customer record for any capabilities you need to add later.
+
+If you also provision customers through the Customer API, make sure the identifiers used by your integration align with the customer mapping supported by your OAuth configuration. Do not assume that two independently created records will automatically be merged.
+
+## Connect from an AI client
+
+Once OAuth is configured, customers can connect your MCP endpoint from compatible AI clients and authenticate using their existing account. Clients that support MCP OAuth can discover the authentication flow and direct the customer through sign-in when access to a protected capability requires it.
+
+The exact OAuth discovery and protocol endpoints are documented under [MCP authentication](/platform/mcp/authentication). Keep those protocol details there rather than duplicating them across the customer documentation.
 
 ## Related
 
 <CardGroup cols={2}>
+  <Card title="Customers" icon="regular user" href="/platform/customers/overview">
+    Understand the customer identity model across Mitu.
+  </Card>
+
+  <Card title="Customer API" icon="regular code" href="/platform/customers/customer-api">
+    Create customers explicitly from your backend.
+  </Card>
+
   <Card title="MCP authentication" icon="regular key" href="/platform/mcp/authentication">
-    The discovery surface and the two authentication methods.
+    Configure authentication and OAuth discovery for MCP clients.
   </Card>
-  <Card title="Customers" icon="regular user" href="/platform/customers/customer-api">
-    The customer record and how to read it back.
-  </Card>
+
   <Card title="Agent Wallets" icon="regular wallet" href="/platform/agent-wallets/overview">
-    Issuing a wallet to a customer once they exist.
-  </Card>
-  <Card title="Events" icon="regular bell" href="/platform/webhooks/events">
-    Everything Mitu sends, including `customer.created`.
+    Issue wallets separately after a customer exists.
   </Card>
 </CardGroup>

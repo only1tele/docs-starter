@@ -1,58 +1,84 @@
 ---
 title: Domains
-subtitle: Where agents reach you, and where Mitu forwards what they ask for.
+subtitle: Configure where AI clients connect and where Mitu sends requests to your API.
 ---
 
-## Integration
+An MCP integration has two different destinations. AI clients connect to your MCP endpoint, while Mitu sends tool calls to the API base URL configured for your existing backend. Keeping those two addresses separate lets you provide a dedicated MCP hostname without changing the API that already powers your product.
 
-Two settings decide what Mitu does with a call once an agent makes it.
+For example, customers might connect to `https://mcp.yourdomain.com/mcp`, while the corresponding tool requests are sent to operations beneath `https://api.yourdomain.com`.
+
+## API base URL
+
+Configure the HTTPS base URL for the API that already powers your product.
 
 ```text
-API base URL        https://api.yoursite.com
-Health check path   polled, so the dashboard can show whether your API is up
-Customer sign-in    off, or your own OAuth
+https://api.yourdomain.com
 ```
 
-You give Mitu no credential for your API. Every forwarded request is signed with a secret Mitu issues to you, and that signature is what proves a call is genuine. See [request signature verification](/platform/security/request-verification).
+Endpoint paths are resolved relative to this base URL. If you register `POST /orders`, Mitu sends the corresponding request to the `/orders` operation on the configured API host.
 
-Turn customer sign-in on and your customers authenticate with the credentials they already have. Mitu forwards their access token with every request, so your existing endpoint keeps working unchanged. [MCP authentication](/platform/mcp/authentication) covers both methods.
+You do not provide Mitu with your application's own API credential simply to authenticate these forwarded requests. When Mitu sends a request to your backend, your application verifies that it came through Mitu using the signing secret issued for your integration.
 
-{/* SCREENSHOT: docs/assets/platform/mcp/integration-api.png
-     Caption: "The Integration page, with the sign-in switch on and the OAuth
-     fields showing." No secrets visible. */}
+If a tool requires a signed-in customer and OAuth is being used, the customer's access token can also be forwarded so your existing customer authentication and authorisation rules continue to apply.
 
-## Your own domain
+See [Request verification](/platform/security/request-verification) and [MCP authentication](/platform/mcp/authentication) for these two separate concerns.
 
-By default agents reach you at a Mitu URL. Claim your own and they reach you at yours instead:
+## MCP URL
+
+The MCP URL is the address compatible AI clients connect to. By default, you can use the Mitu-provided endpoint for your integration. You can also configure a custom MCP hostname so customers connect through a domain associated with your own product.
 
 ```text
 https://mcp.yourdomain.com/mcp
 ```
 
+Changing the MCP hostname does not change the API base URL used by your backend. The custom domain is the client-facing MCP entry point, while your existing API continues receiving the corresponding requests behind it.
+
+## Configure a custom domain
+
 <Steps>
+  <Step title="Add your hostname">
+    Open the domain configuration for your MCP integration and enter the hostname you want customers to use, such as `mcp.yourdomain.com`.
+  </Step>
 
-<Step title="Add the domain">
-Enter the hostname you want to use on the **Domain** page.
-</Step>
+  <Step title="Add the DNS records">
+    Create the DNS records shown by Mitu using your DNS provider. Enter the values exactly as provided so ownership and routing can be verified correctly.
+  </Step>
 
-<Step title="Add the DNS records">
-Mitu shows the records to create. Add them with your DNS provider exactly as given.
-</Step>
+  <Step title="Verify the domain">
+    Verify ownership after the DNS records have propagated. If the records are not visible yet, you can retry verification later without changing the rest of your MCP configuration.
+  </Step>
 
-<Step title="Verify ownership">
-Ownership is proved by a TXT lookup. Verification can be retried while DNS propagates.
-</Step>
+  <Step title="Complete certificate provisioning">
+    After the domain has been verified, allow certificate provisioning to complete before treating the custom hostname as ready for customers.
+  </Step>
 
-<Step title="Wait for the certificate">
-The certificate is issued after verification succeeds.
-</Step>
-
-<Step title="Use the new URL">
-Give customers the custom URL. Until verification and the certificate are both done, the Mitu URL keeps working, so nothing breaks while you wait.
-</Step>
-
+  <Step title="Use the custom MCP URL">
+    Once the domain is ready, provide the custom MCP URL to customers and compatible AI clients. Your Mitu-provided MCP endpoint can remain available while the custom domain is being configured.
+  </Step>
 </Steps>
 
-{/* SCREENSHOT: docs/assets/platform/mcp/domain.png
-     Caption: "The Domain page mid-verification, showing the DNS records."
-     Use example values, not a real zone. */}
+## Keep the two domains separate
+
+The MCP domain and API domain serve different purposes and do not need to match. A customer-facing MCP endpoint such as `mcp.example.com` can forward operations to an existing API at `api.example.com`, and your backend does not need to be moved or renamed to support the custom MCP domain.
+
+This separation lets you introduce an AI-agent channel alongside your existing clients without changing the URL structure those clients already use.
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="MCP" icon="regular plug" href="/platform/mcp/overview">
+    Understand how the MCP layer connects AI clients to your existing API.
+  </Card>
+
+  <Card title="Endpoints" icon="regular list-check" href="/platform/mcp/endpoints">
+    Configure operations relative to your API base URL.
+  </Card>
+
+  <Card title="Authentication" icon="regular key" href="/platform/mcp/authentication">
+    Configure customer authentication for protected tools.
+  </Card>
+
+  <Card title="Request verification" icon="regular shield-check" href="/platform/security/request-verification">
+    Verify requests sent from Mitu to your backend.
+  </Card>
+</CardGroup>

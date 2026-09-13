@@ -1,19 +1,15 @@
 ---
 title: Agent Wallets
-subtitle: A wallet you issue to one of your customers. They fund it, and their agent spends from it within the limits you set.
+subtitle: Issue wallets your customers can fund and their AI agents can spend from, within the controls you configure.
 ---
 
-The money is the customer's. You are the operator: you decide that a wallet exists, what it is called, and how much may leave it.
+An Agent Wallet belongs to one of your customers and gives their AI agent a controlled balance it can use to make payments on their behalf. Your business decides which customers receive wallets, what each wallet is called and the spending controls that apply, while the customer owns the funds held in the wallet.
 
-Each wallet has its own on-chain addresses, one covering Base and Tempo and one for Solana, so funding one wallet never touches another.
+Wallets are created explicitly rather than automatically when a customer signs in or connects an AI client. Each wallet maintains its own balance, controls and funding addresses, which makes it possible for a customer to separate money by purpose without giving their agent unrestricted access to everything they hold.
 
-## A wallet exists only because you created one
+## Create a wallet
 
-Nothing else makes a wallet. Signing in does not, reading a balance does not, and opening a page does not. A customer with no wallet has no balance and no address, and that is a real state rather than a fault.
-
-This is deliberate. A wallet costs real addresses to fund and splits a customer's money into pots. That is your decision, not an agent's.
-
-## Creating one
+Create a wallet for an existing customer and give it a name that both the customer and their AI agent can understand.
 
 ```bash title="Create a wallet"
 curl --request POST \
@@ -22,7 +18,11 @@ curl --request POST \
   --header "Content-Type: application/json" \
   --data '{
     "name": "Travel",
-    "limits": { "per_payment": 25, "monthly": 200, "approve_above": 50 }
+    "limits": {
+      "per_payment": 25,
+      "monthly": 200,
+      "approve_above": 50
+    }
   }'
 ```
 
@@ -32,75 +32,105 @@ curl --request POST \
   "customer_id": "cus_ds9hazr8jd3l",
   "name": "Travel",
   "currency": "USDC",
-  "limits": { "per_payment": 25, "monthly": 200,
-              "approve_above": 50, "currency": "USD" },
+  "limits": {
+    "per_payment": 25,
+    "monthly": 200,
+    "approve_above": 50,
+    "currency": "USD"
+  },
   "addresses": [
-    { "network": "base",   "address": "0xd7Ca1fdA..." },
-    { "network": "tempo",  "address": "0xd7Ca1fdA..." },
-    { "network": "solana", "address": "3c6SpTNK..." }
+    {
+      "network": "base",
+      "address": "0xd7Ca1fdA..."
+    },
+    {
+      "network": "tempo",
+      "address": "0xd7Ca1fdA..."
+    },
+    {
+      "network": "solana",
+      "address": "3c6SpTNK..."
+    }
   ],
   "created_at": "2026-09-11T15:01:32.760Z"
 }
 ```
 
-You can also create one from the dashboard: **Wallets**, then **Create wallet**, then pick the customer, name it and set the limits.
+### Parameters
 
-{/* SCREENSHOT: docs/assets/platform/agent-wallets/create-wallet.png
-     Caption: "Issue a wallet to a customer and set what their agent may
-     spend." No real balances or customer data. */}
+| Parameter | Type | Required | Description |
+| --- | --- | --- | --- |
+| `name` | `string` | Yes | A customer-friendly name for the wallet, such as `Travel`, `Office` or `Shopping`. |
+| `limits.per_payment` | `number` | No | The configured limit for an individual payment. |
+| `limits.monthly` | `number` | No | The configured monthly spending limit for the wallet. |
+| `limits.approve_above` | `number` | No | The configured amount above which customer approval may be required. |
 
-## Names
+See [Limits and controls](/platform/agent-wallets/limits-and-controls) for the current enforcement behaviour of each control.
 
-The name is what the customer says out loud, because their agent names the wallet when paying: "pay from Travel". Choose names that read the way somebody would say them.
+You can also issue wallets from the dashboard by opening **Wallets**, choosing **Create wallet**, selecting the customer and configuring the wallet name and controls.
 
-```text
-Travel
-Shopping
-Office
-```
+## Wallet creation is explicit
 
-Names are unique per customer, since two wallets called Travel would leave the agent guessing. Creating the same name twice returns the wallet you already have, so the call is safe to retry.
+Creating a customer does not automatically create a wallet, and neither does signing in, connecting through MCP or asking for a balance. A customer can therefore exist without an Agent Wallet, and that is a normal account state rather than an error.
 
-## Limits on creation
+This distinction keeps wallet issuance under your control. You decide which customers should receive spending capabilities and when those wallets should be created. If a customer does not need an Agent Wallet, their customer account can continue to exist and use other parts of your product without one.
 
-Limits you omit are inherited from the limits that customer already has. Omitted does not mean unlimited. [Limits and controls](/platform/agent-wallets/limits-and-controls) covers each control and the exact meaning of zero.
+## Wallet names
 
-## Reading wallets back
+A wallet name is part of the customer-facing interface, not just an internal label. Customers may refer to wallets by name when instructing their AI agents, so names should be short, distinct and easy to understand in natural language. Names such as `Travel`, `Shopping` and `Office` are generally clearer than identifiers such as `Wallet 1` or `Main 2`.
+
+Wallet names are unique within a customer because an agent needs an unambiguous way to determine which balance the customer intends to use. If a customer has several wallets, the wallet name becomes particularly important when a payment is being made.
+
+## Limits
+
+Spending controls are configured for each wallet when it is created and can determine how the wallet may be used. Limits that are omitted during creation can inherit the controls already configured for the customer, so an omitted value should not automatically be interpreted as unlimited spending.
+
+The controls currently supported on the wallet are `per_payment`, `monthly` and `approve_above`. Their enforcement behaviour is documented separately because not every configured control necessarily affects the payment path in the same way.
+
+See [Limits and controls](/platform/agent-wallets/limits-and-controls) for the current behaviour.
+
+## Retrieve a customer's wallets
+
+Retrieve the wallets belonging to a customer through the API.
 
 ```http
 GET /v1/customers/{customer_id}/wallets
 ```
 
-Returns every wallet the customer holds, with its limits.
+The response contains the wallets issued to that customer together with their balances, configured controls and other wallet information. A customer with no wallets should be handled as a valid result rather than as an integration failure.
 
-## What the agent can do
+## What an AI agent can do
 
-An agent can list the wallets a customer holds, read a balance, read a funding address, and settle one of your charges from a wallet it is allowed to use. It cannot create a wallet, move money between wallets, withdraw, or change a limit. [Wallet tools](/platform/agent-wallets/wallet-tools) covers the tools an agent sees.
+Once the customer is connected, their AI agent can use wallet capabilities made available by Mitu to inspect the wallets it can use, check balances, retrieve funding addresses and complete permitted payments. The wallet remains owned by the customer even when an AI agent is using it.
 
-With one wallet an agent need not name it. With several it must, and naming none is refused with the names listed. An unrecognised name is refused too, rather than falling back to a default, because picking a pot on somebody's behalf is how money meant for travel buys office supplies.
+An AI agent cannot create wallets, withdraw funds, move money between wallets, change spending controls or take ownership of a wallet. Those operations remain outside the agent's spending capabilities so that giving an agent permission to pay does not give it unrestricted control over the customer's money.
+
+See [Wallet tools](/platform/agent-wallets/wallet-tools) for the capabilities available to connected AI agents.
 
 ## Related
 
 <CardGroup cols={2}>
   <Card title="Limits and controls" icon="regular sliders" href="/platform/agent-wallets/limits-and-controls">
-    `per_payment`, `monthly` and `approve_above`, and where freezes apply.
+    Understand the spending controls configured on Agent Wallets.
   </Card>
+
   <Card title="Funding" icon="regular arrow-down-to-line" href="/platform/agent-wallets/funding">
-    How money reaches a wallet, and when it is credited.
+    Fund an Agent Wallet and make its balance available for payments.
   </Card>
+
+  <Card title="Wallet tools" icon="regular wrench" href="/platform/agent-wallets/wallet-tools">
+    See the wallet capabilities available to connected AI agents.
+  </Card>
+
   <Card title="Multiple wallets" icon="regular layer-group" href="/platform/agent-wallets/multiple-wallets">
-    Separate pots, naming, and the selection rules.
+    Give a customer separate wallets for different purposes.
   </Card>
-  <Card title="Accepting payment" icon="regular credit-card" href="/platform/payments/overview">
-    What a wallet is spent on.
-  </Card>
+
   <Card title="Customers" icon="regular user" href="/platform/customers/customer-api">
-    The record a wallet belongs to.
+    Understand the customer record an Agent Wallet belongs to.
   </Card>
-  <Card title="Give your customers Agent Wallets" icon="regular rocket" href="/guides/use-cases/agent-wallets">
-    The end-to-end guide, from customer to first payment.
-  </Card>
+
   <Card title="Build agents that can pay" icon="regular robot" href="/guides/use-cases/agent-purchasing">
-    The buyer's side, where the agent spends a connected account's balance.
+    Let the AI agent you are building make payments using an Agent Wallet.
   </Card>
 </CardGroup>

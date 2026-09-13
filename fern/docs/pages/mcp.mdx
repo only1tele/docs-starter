@@ -1,80 +1,103 @@
 ---
-title: The MCP
-subtitle: Your existing API, exposed to AI agents as tools they can discover, understand and pay for.
+title: MCP
+subtitle: Make your existing products, services and APIs available to AI agents as tools they can discover and use.
 ---
 
-Your application already has clients: web, iOS, Android, or another service. An agent is another one. The difference is that it reads a tool description instead of a screen.
+Your application already serves customers through interfaces such as your website, mobile application or API. MCP gives you another channel by allowing compatible AI clients to discover and use selected capabilities from the API you already run.
 
-So the work is not building an agent experience. It is describing the API you already have well enough that a model can choose correctly: what each operation does, when to reach for it, what it takes, and what it costs.
+You do not need to rebuild your product around AI agents or maintain a separate agent-facing backend. Choose the operations you want agents to use, describe those operations clearly and define the request and response schemas they already understand. Your API remains responsible for your data, business logic, customer accounts and fulfilment.
 
-Mitu handles the layer in front of your API:
+## What Mitu provides
 
-- MCP discovery and the tool list
-- tool descriptions, schemas and pricing metadata
-- customer authentication, by key or through your own OAuth
-- payment challenges and settlement on paid operations
-- signed forwarding to your backend
+Mitu provides the MCP layer between compatible AI clients and your existing API. It publishes the tools you make available, provides the descriptions and schemas agents use to understand them, handles supported customer authentication and forwards requests to the corresponding operations on your backend.
 
-Your endpoints do not change, and they remain the source of truth for your business logic.
+Paid operations can also participate in Mitu's agent payment flow. You configure which operations are paid and how they are priced, while Mitu handles the payment interaction with the agent before the paid request reaches your API.
 
-## What an agent sees
+Your backend does not need to implement MCP transport or separate payment protocols simply to make an existing operation available to agents.
 
-Register your endpoints once. Each becomes a named tool with its price attached. An agent that connects sees something like:
+## From API operation to tool
+
+An operation becomes available to an AI agent when you register it as an MCP endpoint. The endpoint connects an operation on your API with the information an AI model needs to decide when and how to call it.
+
+For example, an ordering API might make the following operations available:
+
+| Tool | API operation | Purpose |
+| --- | --- | --- |
+| `get_menu` | `GET /menu` | Retrieve the current menu and available items. |
+| `check_delivery_zone` | `GET /zones` | Check whether an address can be served. |
+| `create_order` | `POST /orders` | Create an order after the customer has confirmed the details. |
+| `get_order` | `GET /orders/{id}` | Retrieve the current state of an existing order. |
+
+The agent sees the tool name, description, usage guidance and schemas you configure. It does not need to understand the internal structure of your application or every route your backend serves.
+
+Only make operations available when they are meaningful for an AI agent. Connecting your API does not automatically publish every endpoint.
+
+## Keep your API authoritative
+
+MCP changes how a client reaches your product, not where your business rules live. Your existing API should remain authoritative for prices, stock, availability, account permissions, order state and other information that can change over time.
+
+Avoid placing volatile business information directly in tool descriptions. Instead, give the agent a tool that retrieves the current value from your API. This keeps the information an agent acts on aligned with the same source your other clients already use.
+
+## Customer access
+
+Tools can be public or require an identified customer. Where customer authentication is required, customers can connect using a customer key or through your existing OAuth sign-in flow.
+
+OAuth lets the customer continue using the account they already have with your product. Their access token can be forwarded with requests so your backend continues applying its existing authentication, authorisation and entitlement rules.
+
+Customer authentication identifies **who the agent is acting for**. It is separate from [Request verification](/platform/security/request-verification), which confirms that the request itself came through Mitu.
+
+See [MCP authentication](/platform/mcp/authentication) for both authentication methods.
+
+## Paid operations
+
+An MCP tool can be free or paid. For paid operations, configure the pricing model that determines what the agent needs to pay before your API fulfils the request.
+
+Mitu handles the payment flow with the agent and forwards the request to your API once the required payment has been completed. Your backend then verifies that the request came through Mitu and processes it using the same business logic it already uses.
+
+See [Pricing](/platform/payments/pricing) and [Agent payments](/platform/payments/agent-payments) for the payment model.
+
+## MCP endpoint
+
+Compatible AI clients connect to your MCP endpoint using Streamable HTTP. You can use a Mitu-hosted endpoint or configure your own MCP domain.
 
 ```text
-get_menu              GET   /menu     free
-create_order          POST  /orders   dynamic
-check_delivery_zone   GET   /zones    free
-call_endpoint         any path on your service
+https://mcp.mitu.ai/mcp
+
+https://mcp.yourdomain.com/mcp
 ```
 
-{/* SCREENSHOT: docs/assets/platform/mcp/tool-list.png
-     Caption: "An agent's tool list for a merchant MCP, showing named endpoint
-     tools beside the wallet tools." */}
-
-`call_endpoint` sits alongside the named tools and takes any path on your service. The named tools are what an agent should reach for, because they carry your description and your price, but they only cover paths you registered. A link pasted into a chat, or a sub-path beneath a registered one, has no tool of its own and would otherwise be uncallable. It is a fallback, not a substitute for defining tools properly.
-
-## Connecting
-
-```text
-URL         https://mcp.yourdomain.com/mcp, or https://mcp.mitu.ai/mcp
-Transport   Streamable HTTP
-```
-
-Customers authenticate either with a customer key you issue them or by signing in with your own identity provider. [MCP authentication](/platform/mcp/authentication) is the canonical description of both.
+See [Domains](/platform/mcp/domains) for configuring a custom MCP hostname.
 
 ## Instructions
 
-Free text sent to every agent that connects, before it sees any tool. Use it for what a tool description cannot carry: house rules, the order you expect calls in, and what you will not do.
+You can provide instructions that apply to the MCP experience as a whole. Use them for guidance that is broader than a single tool, such as important product rules, sequencing expectations or behaviour that should apply across several capabilities.
 
-## Where to go next
+Keep operation-specific guidance in the endpoint's `description` and `when_to_use` fields. Global instructions should not become a replacement for clear individual tool definitions.
+
+## Related
 
 <CardGroup cols={2}>
   <Card title="Endpoints" icon="regular list-check" href="/platform/mcp/endpoints">
-    Every field on an endpoint, and how it reaches the model.
+    Configure the API operations you want AI agents to use.
   </Card>
-  <Card title="Endpoint types" icon="regular tag" href="/platform/payments/pricing">
-    Free, fixed, dynamic, tiered and session pricing.
+
+  <Card title="Tool schemas" icon="regular brackets-curly" href="/platform/mcp/tool-schemas">
+    Describe the request and response shapes your tools use.
   </Card>
+
   <Card title="Authentication" icon="regular key" href="/platform/mcp/authentication">
-    Customer keys and OAuth.
+    Identify customers using customer keys or OAuth.
   </Card>
-  <Card title="Domain and integration" icon="regular globe" href="/platform/mcp/domains">
-    Your own MCP URL, and where Mitu forwards requests.
+
+  <Card title="OpenAPI import" icon="regular file-import" href="/platform/mcp/open-api-import">
+    Create endpoint definitions from an OpenAPI document.
   </Card>
-  <Card title="Verify requests" icon="regular shield-check" href="/platform/security/request-verification">
-    Prove a forwarded request came from Mitu.
+
+  <Card title="Domains" icon="regular globe" href="/platform/mcp/domains">
+    Configure the MCP URL customers connect to.
   </Card>
+
   <Card title="Bring your product to AI agents" icon="regular rocket" href="/guides/use-cases/agent-channels">
-    The end-to-end guide, from integration to a working tool list.
-  </Card>
-  <Card title="Sell your API to AI agents" icon="regular coins" href="/guides/use-cases/api-monetisation">
-    The same MCP, priced: discovery, 402, settlement, delivery.
-  </Card>
-  <Card title="Let AI agents buy from you" icon="regular basket-shopping" href="/guides/use-cases/agent-commerce">
-    Orders, bookings and reservations through the API you already run.
-  </Card>
-  <Card title="Buying through the Mitu MCP" icon="regular cart-shopping" href="/platform/mcp/mitu-mcp">
-    The other direction: one connection an agent uses to buy across the platform.
+    Follow the end-to-end guide for making your product available through MCP.
   </Card>
 </CardGroup>

@@ -1,102 +1,94 @@
 ---
 title: Customers
-subtitle: A customer is one of your users. The record is what lets a wallet belong to somebody and an event name who it is about.
+subtitle: Represent the people or accounts your AI agents act for across Mitu.
 ---
 
-Mitu holds a thin record of the people you serve, so that MCP access, Agent Wallets and events can all be tied to the person an agent is acting for.
+A customer represents one of the people or accounts your business already serves. The customer record gives Mitu a consistent identity that can be associated with MCP access, Agent Wallets, payments and events without replacing the customer records you already maintain in your own system.
+
+Your application remains the source of truth for customer profiles, permissions, purchases, subscriptions and other business data. Mitu only needs enough information to identify the customer and associate activity on the platform with the correct account.
+
+## Connect customers to your system
+
+Use `client_reference_id` to associate a Mitu customer with the corresponding record in your own system. This should be a stable identifier your backend already understands, such as your internal user or account ID.
+
+For example, if your application knows a customer as `your_user_8841`, you can use the same value when creating their Mitu customer record. That reference can then be used to connect Mitu activity back to the customer in your own system without making the Mitu customer ID your primary identity.
 
 ```text
-Your system          the customer, in full
-        |
-        | client_reference_id
-        |
-Mitu                 a record: an id, a reference, a way to reach them
-        |
-        +-- MCP access, by key or by sign-in
-        +-- Agent Wallets you issue them
-        +-- events that name who they are about
+your_user_8841
 ```
 
-## Your customer record stays yours
-
-Mitu is not a CRM and does not want to be one. It holds enough to identify somebody and no more. Your own database remains the source of truth for who they are, what they have bought, what they are entitled to and everything else you already know.
-
-The join between the two is `client_reference_id`: your identifier, stored on the Mitu record, returned on every event as `customer_ref` and on every forwarded request as `x-mitu-customer-ref`. Set it and you never have to store Mitu's id unless you want to.
+Keep the reference stable for the lifetime of the customer. It exists to connect the Mitu record to the account you already manage, while the Mitu customer ID identifies that resource inside Mitu.
 
 ## How customers are created
 
-```text
-Merchant API    POST /v1/customers            you provision them
-OAuth sign-in   created on first sign-in      from your provider's sub
-```
+Customers can be created explicitly by your backend or through your existing sign-in flow.
 
-Whichever path they arrive by, the model afterwards is identical: a customer exists, and anything else is something you create for them.
+| Method | How it works | Best suited for |
+| --- | --- | --- |
+| Customer API | Your backend creates the customer through the API. | Products where you provision customers before they connect an AI client. |
+| OAuth | The customer signs in through your existing identity provider and Mitu creates or maps the corresponding customer record. | Products where customers should connect using accounts they already have. |
 
-<Note title="Creating a customer creates nothing else">
-No wallet, no balance, no address. A wallet is a separate, explicit action. So is issuing a key beyond the one returned at creation.
+Both paths result in the same customer model. Once the customer exists, you can associate other capabilities with that record, such as Agent Wallets. The method used to create the customer does not automatically determine which other products or capabilities they receive.
+
+See [Customer API](/platform/customers/customer-api) and [OAuth](/platform/customers/oauth) for the two flows.
+
+<Note title="Customer creation does not create a wallet">
+  A customer and an Agent Wallet are separate resources. Creating or signing in a customer does not automatically create a wallet, balance or funding address. You decide separately which customers should receive Agent Wallets.
 </Note>
 
-## What a customer can have
+## Customer authentication
 
-```text
-A customer key     mcpk_…, returned once at creation
-Agent Wallets      as many as you issue them, each a separate pot
-Movement           payments made, wallets credited and debited
-```
+When an AI agent needs to act on behalf of a specific customer, the connection must identify who that customer is. Customers can connect using a customer key or, where configured, by signing in through your existing OAuth identity provider.
 
-None of these appear automatically.
+Customer authentication answers **who the AI agent is acting for**. It does not replace the authorisation rules in your own application. Your backend should continue deciding what that customer can see or do using the permissions and business rules you already enforce.
 
-## Customer identity in a request
+See [Customer keys](/platform/customers/customer-keys) and [OAuth](/platform/customers/oauth) for the available authentication models.
 
-When an agent calls one of your endpoints on behalf of a known customer, your backend receives:
+## Customer identity in requests
+
+For operations associated with an identified customer, Mitu can include customer context with the request sent to your API. This lets your backend associate the agent's action with the corresponding customer in your own system.
 
 ```http
 x-mitu-customer-id: cus_ds9hazr8jd3l
 x-mitu-customer-ref: your_user_8841
 ```
 
-Verify the request signature before trusting either. They are plain headers, and they are set after the forwarded ones precisely so a caller cannot supply its own.
+Do not trust these headers on their own. Verify that the request came through Mitu before using Mitu-specific customer context in your application. Request verification confirms where the request came from, while customer authentication identifies who the AI agent is acting for.
 
-An agent paying from its own funds belongs to nobody you have a record of, so both are absent. That is ordinary, not a fault.
+If OAuth is being used, the signed-in customer's access token can also be forwarded so your existing authentication, authorisation and account rules continue to apply.
 
-## Events
+See [Request verification](/platform/security/request-verification) for the verification process.
 
-`customer.created` fires when one comes into existence, either way.
+## Customers and Agent Wallets
 
-```json
-{
-  "event": "customer.created",
-  "event_data": {
-    "customer_id": "cus_0t9549fps3xd",
-    "customer_ref": "auth0|68f3c2a1b9",
-    "name": "Tele",
-    "email": "tele@mitu.ai",
-    "status": "unverified",
-    "source": "oauth",
-    "service_id": "svc_dhydwg80dzb4vy6xjl2m"
-  }
-}
-```
+Agent Wallets belong to customers, but they are issued separately. A customer can have no wallets, one wallet or several wallets depending on how your product is designed.
 
-`source` distinguishes the two paths. On an OAuth customer, `customer_ref` is the identity provider's `sub`.
+The customer owns the funds in those wallets, while your business decides which customers receive wallets and configures the controls available for them. An AI agent acting for the customer can use supported wallet capabilities without gaining administrative control over the customer's funds.
 
-<Note title="customer.status.changed is not emitted">
-The event type exists but nothing raises it today. Do not build a verification flow that waits on it.
-</Note>
+See [Agent Wallets](/platform/agent-wallets/overview) for the wallet model.
+
+## Customer events
+
+Customer events let your application react when customer-related activity happens on the platform. For example, `customer.created` can be emitted when a customer record is created through a supported customer flow.
+
+Keep event payloads, delivery behaviour and implementation status on the [Events](/platform/webhooks/events) reference rather than duplicating those details here. This keeps the customer overview focused on identity while the Events page remains the source of truth for webhook behaviour.
 
 ## Related
 
 <CardGroup cols={2}>
   <Card title="Customer API" icon="regular code" href="/platform/customers/customer-api">
-    Creating and reading customers.
+    Create and retrieve customer records through the API.
   </Card>
+
   <Card title="Customer keys" icon="regular key" href="/platform/customers/customer-keys">
-    What an `mcpk_…` key is for.
+    Connect a customer to an AI client using a customer key.
   </Card>
+
   <Card title="OAuth" icon="regular right-to-bracket" href="/platform/customers/oauth">
-    Customers who arrive by signing in.
+    Let customers connect using your existing sign-in flow.
   </Card>
+
   <Card title="Agent Wallets" icon="regular wallet" href="/platform/agent-wallets/overview">
-    What you can issue a customer.
+    Issue wallets that belong to your customers.
   </Card>
 </CardGroup>

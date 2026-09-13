@@ -1,13 +1,15 @@
 ---
 title: Tool schemas
-subtitle: How your request and response shapes become something a model can call correctly.
+subtitle: Describe the inputs and outputs of your API operations so AI agents can call them correctly.
 ---
 
-An endpoint's input schema becomes the tool's arguments. Its output schema tells the agent what it is getting back. Together with the description and `when_to_use`, they are everything the model has to work with.
+Tool schemas describe the data an AI agent can send to an operation and the response it should expect in return. Together with the tool name, description and `when_to_use` guidance, they give the model the contract it needs to call your API without understanding your application's internal implementation.
 
-## The request body becomes the arguments
+Use JSON Schema to represent the same inputs and outputs your API already understands. You do not need to create agent-specific fields or redesign your request objects simply because the caller is an AI model.
 
-Your API already accepts a shape. The input schema describes that shape to the model, in JSON Schema.
+## Input schema
+
+The input schema describes the arguments available to the agent. These arguments are converted into the request your existing API expects.
 
 ```json title="input_schema"
 {
@@ -15,72 +17,92 @@ Your API already accepts a shape. The input schema describes that shape to the m
   "properties": {
     "location_id": {
       "type": "string",
-      "description": "Location identifier from list_locations"
+      "description": "Location identifier returned by list_locations"
     },
     "date": {
       "type": "string",
       "format": "date",
-      "description": "Booking date, YYYY-MM-DD"
+      "description": "Booking date in YYYY-MM-DD format"
     },
     "party_size": {
       "type": "integer",
       "minimum": 1,
       "maximum": 12,
-      "description": "Number of people"
+      "description": "Number of people in the booking"
     },
     "seating": {
       "type": "string",
-      "enum": ["indoor", "outdoor", "bar"]
+      "enum": ["indoor", "outdoor", "bar"],
+      "description": "Preferred seating area"
     }
   },
-  "required": ["location_id", "date", "party_size"]
+  "required": [
+    "location_id",
+    "date",
+    "party_size"
+  ]
 }
 ```
 
-What the agent sends is converted into the body your API already understands. You do not add fields for the agent's benefit: no `agent_instruction`, no `llm_context`, no conversation transcript, unless your own API genuinely wants them.
+Keep the schema aligned with the request shape your API already accepts. Do not add fields such as `agent_instruction`, `llm_context` or conversation history unless those values are genuinely part of your application's API contract.
 
-## The output schema
+## Output schema
+
+The output schema describes the structure returned by your API. A clear output contract helps the agent understand which values are important and how the result can be used in later operations.
 
 ```json title="output_schema"
 {
   "type": "object",
   "properties": {
-    "id": { "type": "string", "description": "Booking reference" },
-    "status": { "type": "string", "enum": ["confirmed", "waitlisted"] },
-    "date": { "type": "string", "format": "date" },
-    "party_size": { "type": "integer" }
+    "id": {
+      "type": "string",
+      "description": "Booking reference"
+    },
+    "status": {
+      "type": "string",
+      "enum": ["confirmed", "waitlisted"]
+    },
+    "date": {
+      "type": "string",
+      "format": "date"
+    },
+    "party_size": {
+      "type": "integer"
+    }
   },
-  "required": ["id", "status"]
+  "required": [
+    "id",
+    "status"
+  ]
 }
 ```
 
-This matters more than it looks. An agent that knows `id` is the booking reference can quote it back to the customer and pass it to a later `get_booking` call. One that does not has to infer which field mattered from a wall of JSON, and will sometimes pick wrong.
+For example, identifying `id` as the booking reference tells the agent that the value can be shown to the customer or supplied to another tool such as `get_booking`. Without that context, the model has to infer the meaning of fields from the raw response.
 
-## Design principles
+## Design schemas for clear choices
 
-**Name fields so a model can reason about them.** `location_id` beats `lid`. The schema is read by something that has never seen your codebase.
+Field names should be understandable without knowledge of your codebase. Prefer names such as `location_id`, `delivery_address` and `party_size` over internal abbreviations that only your engineering team understands.
 
-**Describe every field**, especially where a value comes from somewhere else. "Identifier from `list_locations`" tells the model to call that tool first, which is often the difference between a working sequence and a guessed identifier.
+Descriptions should explain the meaning of a field and, where relevant, where the value comes from. If `location_id` must be obtained from `list_locations`, say so in the schema. This helps the agent understand the relationship between tools rather than inventing identifiers.
 
-**Make `required` match reality.** Marking an optional field required makes the model invent a value for it. Leaving a genuinely required field out produces calls your API rejects.
+Use `required` only for values your API genuinely requires. Making an optional field required can cause the agent to invent a value, while failing to mark a required field can produce requests your API cannot process. Closed sets should use `enum`, and numerical or formatted values should use constraints such as `minimum`, `maximum` and `format` when those constraints reflect the actual API contract.
 
-**Use enums wherever the set is closed.** An enum removes a whole class of guessing, and costs one line.
+## Keep schemas aligned with your API
 
-**Constrain what you actually constrain.** `minimum`, `maximum`, `format` and patterns all narrow the space the model is choosing from.
+The schema presented to the agent should describe the same contract your backend enforces. A schema that permits values your API rejects creates avoidable failures, while a schema that is more restrictive than your API hides capabilities the customer could otherwise use.
 
-## Keep the schema aligned with your API
+Update your tool schema when the corresponding API contract changes. Treat the schema as part of the public interface of the operation rather than as descriptive metadata that can drift independently from your backend.
 
-A schema looser than your API produces calls your API rejects, and the agent cannot tell why. A schema tighter than your API hides capability the customer is entitled to.
-
-When your API's contract changes, the schema is the thing that has to change with it. An endpoint whose schema has drifted is worse than one with no schema at all, because the model trusts it.
+If your OpenAPI document already represents these request and response shapes accurately, importing it can provide a useful starting point. You should still review the resulting tool definitions for agent-facing descriptions and usage guidance.
 
 ## Related
 
 <CardGroup cols={2}>
   <Card title="Endpoints" icon="regular list-check" href="/platform/mcp/endpoints">
-    Every field on an endpoint record.
+    Configure the operations represented by your tool schemas.
   </Card>
+
   <Card title="OpenAPI import" icon="regular file-import" href="/platform/mcp/open-api-import">
-    Deriving schemas from a document you already maintain.
+    Derive schemas from an API specification you already maintain.
   </Card>
 </CardGroup>

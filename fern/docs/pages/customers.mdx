@@ -1,20 +1,15 @@
 ---
 title: Customer API
-subtitle: A customer is one of your users. The record is what lets a wallet belong to somebody, and what lets an event name who it is about.
+subtitle: Create and retrieve the customer records your Mitu integration uses.
 ---
 
-Mitu holds a customer record so that MCP access, Agent Wallets and events can all be tied to the person or account an agent is acting for.
+Use the Customer API when your backend should explicitly provision customers before they connect to Mitu. Each customer record can be associated with your own customer identifier and later used with capabilities such as customer authentication and Agent Wallets.
 
-There are two ways one comes into existence:
+Creating a customer does not create a wallet or fund an account. It establishes the identity record that other resources can belong to.
 
-```text
-Merchant API    POST /v1/customers
-OAuth sign-in   created on first sign-in, from the identity provider's sub
-```
+## Create a customer
 
-Whichever path a customer arrives by, the model is the same afterwards: a customer exists, and a wallet is something you create for them. Signing in never creates a wallet.
-
-## Creating a customer
+Create a customer with a stable reference from your own system.
 
 ```bash title="Create a customer"
 curl --request POST \
@@ -31,6 +26,18 @@ curl --request POST \
   }'
 ```
 
+### Parameters
+
+| Parameter | Type | Required | Description |
+| --- | --- | --- | --- |
+| `client_reference_id` | `string` | Yes | A stable identifier from your own system used to associate the Mitu customer with your existing customer record. |
+| `first_name` | `string` | No | The customer's first name. |
+| `last_name` | `string` | No | The customer's last name. |
+| `email` | `string` | No | The customer's email address. |
+| `phone` | `string` | No | The customer's phone number. |
+
+A successful request returns the customer record together with the connection information created for that customer.
+
 ```json title="Response"
 {
   "id": "cus_ds9hazr8jd3l",
@@ -45,39 +52,94 @@ curl --request POST \
 }
 ```
 
-### client_reference_id
+### Response fields
 
-Your own identifier for the person. It does three things:
+| Field | Description |
+| --- | --- |
+| `id` | The Mitu identifier for the customer. |
+| `client_reference_id` | The identifier supplied by your own system. |
+| `first_name` | The customer's first name when provided. |
+| `last_name` | The customer's last name when provided. |
+| `email` | The customer's email address when provided. |
+| `phone` | The customer's phone number when provided. |
+| `key` | The customer key created for this customer. |
+| `mcp_url` | The MCP endpoint the customer can connect to. |
+| `created_at` | When the customer record was created. |
 
-- It keeps the Mitu customer tied to the user record you already have.
-- It comes back on every later event as `customer_ref` and on forwarded requests as `x-mitu-customer-ref`, so you never have to store Mitu's id unless you want to.
-- It makes the call safe to retry, because the same reference always resolves to the same customer.
+## Use your own customer reference
 
-### key
+`client_reference_id` connects the Mitu customer to the corresponding customer in your own application. Use an identifier that is stable and unique within your system rather than an email address or other attribute that may change over time.
 
-The `key` field is a customer MCP key, returned once at creation. Only a hash is stored, so it cannot be shown again. [Customer keys](/platform/customers/customer-keys) covers what it is for and what it cannot do.
+For example, if your database identifies a user as `your_user_8841`, use that value as the customer reference. Your application can then use the same reference when reconciling supported events and customer-aware requests without making the Mitu customer ID your primary identity.
+
+```json
+{
+  "client_reference_id": "your_user_8841"
+}
+```
+
+The Mitu `cus_...` identifier is still useful when calling APIs that operate directly on the customer, such as issuing an Agent Wallet. The two identifiers serve different purposes. Your reference connects the record to your application, while the Mitu ID identifies the resource within Mitu.
+
+## Customer key
+
+The `key` returned when the customer is created is a customer key with the `mcpk_...` prefix. It can be used when that customer connects to an MCP-compatible AI client using customer-key authentication.
+
+Treat the returned key as a credential and provide it only to the customer it belongs to. Customer keys are separate from your merchant API key and should not be used by your backend as a replacement for `sk_...` credentials.
+
+See [Customer keys](/platform/customers/customer-keys) for how customer-key authentication works.
 
 ## Idempotency
 
-Send an `Idempotency-Key` header. The same key within 24 hours returns the original response byte for byte. The same key with a different body returns 409, which means something on your side has changed between attempts rather than that a retry failed.
+Use an `Idempotency-Key` when creating customers so a network retry does not accidentally create the same resource more than once.
 
-## Reading customers back
+```http
+Idempotency-Key: customer-your_user_8841
+```
+
+Use a stable key for the same creation attempt rather than generating a new value every time you retry the request. If the API receives a repeated request with the same idempotency key, it can return the result associated with the original operation rather than processing another independent creation request.
+
+Keep idempotency separate from `client_reference_id`. The idempotency key protects a specific API operation from accidental repetition, while `client_reference_id` connects the resulting customer to the record in your own system.
+
+## Retrieve customers
+
+List the customers created for your account:
 
 ```http
 GET /v1/customers?limit=20
+```
+
+Retrieve a specific customer using its Mitu customer ID:
+
+```http
 GET /v1/customers/{id}
 ```
 
-{/* SCREENSHOT: docs/assets/platform/customers/customers.png
-     Caption: "The Customers page." No real personal data. */}
+Use these endpoints when your backend needs the current customer record or the customer ID required by another API operation.
+
+## Customer creation and wallets are separate
+
+A newly created customer does not automatically have an Agent Wallet. If the customer should receive a wallet their AI agent can spend from, issue the wallet separately after the customer exists.
+
+This separation lets your product use Mitu customer identity without requiring every customer to hold funds or use Agent Wallets.
+
+See [Agent Wallets](/platform/agent-wallets/overview) for wallet issuance.
 
 ## Related
 
 <CardGroup cols={2}>
-  <Card title="Customer keys" icon="regular key" href="/platform/customers/customer-keys">
-    The `mcpk_...` credential, and the line between it and your merchant key.
+  <Card title="Customers" icon="regular user" href="/platform/customers/overview">
+    Understand how customer identity fits across the platform.
   </Card>
-  <Card title="Customers through OAuth" icon="regular right-to-bracket" href="/platform/customers/oauth">
-    Customers created from your own identity provider.
+
+  <Card title="Customer keys" icon="regular key" href="/platform/customers/customer-keys">
+    Understand the `mcpk_...` credential returned for a customer.
+  </Card>
+
+  <Card title="OAuth" icon="regular right-to-bracket" href="/platform/customers/oauth">
+    Let customers connect through your existing identity provider.
+  </Card>
+
+  <Card title="Agent Wallets" icon="regular wallet" href="/platform/agent-wallets/overview">
+    Issue a wallet after the customer has been created.
   </Card>
 </CardGroup>

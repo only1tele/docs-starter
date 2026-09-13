@@ -1,67 +1,93 @@
 ---
 title: Authentication
-subtitle: The two ways a customer proves who they are when their agent connects to your MCP.
+subtitle: Identify the customer an AI agent is acting for using a customer key or your existing OAuth sign-in flow.
 ---
 
-Both methods identify the customer to Mitu. They differ in who issues the credential and where it comes from.
+MCP tools can be public or require an identified customer. When customer authentication is required, Mitu needs to know which customer the AI agent is acting for before the operation can be used.
 
-| Method | Use when |
-| --- | --- |
-| Customer key | You provision the customer and want to hand them an MCP credential |
-| OAuth | Customers should sign in with the account they already have with you |
+You can identify customers using a Mitu customer key or your existing OAuth identity provider. Both approaches establish customer context for the connection, but they differ in how the customer receives and proves that identity.
 
-You can run either, and an endpoint's `requires_auth` field decides whether a given tool needs a signed-in customer at all.
+## Authentication methods
+
+| Method | How the customer connects | Best suited for |
+| --- | --- | --- |
+| Customer key | The customer provides an `mcpk_...` credential issued for their Mitu customer record. | Products where you provision access directly. |
+| OAuth | The customer signs in using the account they already have with your product. | Products with an existing customer identity and sign-in system. |
+
+You can support the method that fits your product, and protected endpoint definitions use `requires_auth` to indicate that customer identity is required.
 
 ## Customer keys
 
-You create the customer from your own backend with your merchant key. Mitu returns an `mcpk_...` key belonging to that one customer, and you deliver it to them. They paste it into their AI client, which sends it on every MCP request:
+When you create a customer through the Customer API, Mitu can return an `mcpk_...` customer key associated with that customer. The customer provides this credential to a compatible AI client when connecting to your MCP endpoint.
 
 ```http
 x-api-key: mcpk_3a6f9d2a...
 ```
 
-`Authorization: Bearer <key>` is also accepted.
+Where supported, the credential can also be supplied as a bearer token.
 
-The key is returned once, at creation. Only a hash is stored, so it cannot be shown again; if a customer loses theirs, issue a new one.
+```http
+Authorization: Bearer mcpk_3a6f9d2a...
+```
 
-<Warning title="Two different keys">
-`sk_live_...` and `sk_test_...` are your server-side merchant credentials. `mcpk_...` is one customer's MCP credential. A customer key authenticates to Mitu only. It cannot create wallets, cannot read your account, and never reaches your own API. Never give a customer a merchant key.
+A customer key authenticates one customer to the MCP connection. It is different from the merchant API key your backend uses to call the Mitu API and does not give the customer access to your Mitu account or administrative wallet operations.
+
+<Warning title="Keep merchant and customer credentials separate">
+  `sk_test_...` and `sk_live_...` are server-side credentials for your business. `mcpk_...` identifies an individual customer connecting through MCP. Never provide a merchant API key to a customer or place it in an AI client.
 </Warning>
 
-[Customer keys](/platform/customers/customer-keys) covers the credential itself, and [customers](/platform/customers/customer-api) covers creating the record it belongs to.
+See [Customer keys](/platform/customers/customer-keys) for the customer credential lifecycle.
 
 ## OAuth
 
-Enable customer sign-in on your integration and configure your identity provider. From then on, a customer adds your MCP URL to their client and nothing else. The client discovers the authentication flow and prompts them to sign in with the credentials they already use with you.
+OAuth lets customers connect through the identity system your product already uses. Instead of receiving a separate customer credential, the customer adds your MCP endpoint to a compatible AI client and signs in using their existing account.
 
-Discovery is standards-based. Mitu publishes:
+Mitu participates in the OAuth flow required by the AI client and associates the authenticated identity with the corresponding customer record. Once the customer is signed in, protected tools become available in the context of that customer.
 
-```text
-/.well-known/oauth-protected-resource
-/.well-known/oauth-authorization-server
-/register        dynamic client registration
-/authorize
-/token
-```
+When Mitu forwards a protected operation to your API, the signed-in customer's access token can also be forwarded so your existing backend continues applying its normal authentication, authorisation and entitlement rules.
 
-An unauthenticated `initialize` answers 401 with a `WWW-Authenticate` header naming the resource metadata, which is what prompts a client to offer a sign-in rather than fail.
+OAuth therefore identifies the customer without replacing your application's own access-control model. Your backend remains responsible for deciding what the authenticated customer is allowed to do.
 
-These routes are part of the flow between the AI client and Mitu. You do not call them yourself as part of integrating.
+See [OAuth](/platform/customers/oauth) for customer identity and [Customers](/platform/customers/overview) for the customer model.
 
-After sign-in, Mitu forwards the customer's access token to your API alongside the signed request, so your existing authorisation and entitlement rules continue to apply without change.
+## Public and protected tools
 
-{/* SCREENSHOT: docs/assets/platform/mcp/oauth-config.png
-     Caption: "Customer sign-in enabled, with the identity provider
-     configured." No client secret visible. */}
+Use `requires_auth` on an endpoint to determine whether customer identity is required.
 
-{/* SCREENSHOT: docs/assets/platform/mcp/claude-oauth.png
-     Caption: "An MCP client discovering the OAuth flow and signing the
-     customer in." */}
+Public operations are useful for capabilities that do not depend on a customer account, such as retrieving publicly available information. Protected operations should be used when your API needs to know which customer is making the request or when the operation depends on account-specific data or permissions.
 
-The first successful sign-in creates the Mitu customer. [Customers through OAuth](/platform/customers/oauth) covers that lifecycle, including what it means for wallets.
+Authentication should reflect the requirements your product already has rather than making every MCP tool protected by default.
 
-## Choosing
+## Authentication and request verification
 
-Customer keys suit products where you already provision access, or where you want to hand out MCP access without touching your sign-in. OAuth suits products where the customer's identity already exists and the agent channel should inherit it, and it removes the credential-distribution problem entirely.
+Customer authentication and request verification solve different problems. Customer authentication tells your application **who the AI agent is acting for**, while request verification tells your backend **whether the request actually came through Mitu**.
 
-Neither one affects how your endpoints are written. [Bring your product to AI agents](/guides/use-cases/agent-channels) walks through setting up either from an empty account.
+When your API receives a customer-aware request, verify the Mitu request before trusting Mitu-specific customer context. If OAuth is used, continue validating and authorising the forwarded customer access token according to the same rules your backend already applies.
+
+See [Request verification](/platform/security/request-verification) for the request verification contract.
+
+## Choosing an authentication method
+
+Customer keys are useful when your business explicitly provisions AI access and wants to issue a credential directly to a customer. OAuth is usually a better fit when customers already have accounts and should connect through the same sign-in experience they use elsewhere in your product.
+
+Both methods ultimately provide customer identity to protected tools. The choice does not require you to rewrite the underlying API operations you make available through MCP.
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="Customers" icon="regular user" href="/platform/customers/overview">
+    Understand the customer identity model.
+  </Card>
+
+  <Card title="Customer keys" icon="regular key" href="/platform/customers/customer-keys">
+    Understand the `mcpk_...` customer credential.
+  </Card>
+
+  <Card title="OAuth" icon="regular right-to-bracket" href="/platform/customers/oauth">
+    Connect customers using your existing identity provider.
+  </Card>
+
+  <Card title="Request verification" icon="regular shield-check" href="/platform/security/request-verification">
+    Verify requests before trusting Mitu-specific context.
+  </Card>
+</CardGroup>
