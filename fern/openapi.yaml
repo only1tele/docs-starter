@@ -1,591 +1,1182 @@
 openapi: 3.1.0
 info:
   title: Mitu API
-  version: "1.0.0"
-  description: |
-    The Mitu public API. Authenticate with your secret key in the `x-api-key`
-    header over HTTPS.
+  version: 1.0.0
+  description: The Mitu API lets you manage customers, Agent Wallets, payment experiences, subscriptions and agent
+    payments. Authenticate server-side requests with your account API key in the `x-api-key` header over HTTPS.
 servers:
-  - url: https://api.mitu.ai
-    description: Production
-  - url: https://sandbox-api.mitu.ai
-    description: Sandbox
+- url: https://api.mitu.ai
+  description: Production
+- url: https://sandbox-api.mitu.ai
+  description: Sandbox
 security:
-  - ApiKey: []
-
+- ApiKey: []
 tags:
-  - name: Health
-  - name: Customers
-  - name: Agent Wallets
-  - name: Payment links
-  - name: Invoices
-  - name: Subscription plans
-  - name: Subscriptions
-  - name: Agent payments
-
+- name: Health
+  description: Check that your API key is valid and confirm that you can connect to the Mitu API.
+- name: Customers
+  description: Create and retrieve customers.
+- name: Agent Wallets
+  description: Issue and retrieve Agent Wallets for customers.
+- name: Payment links
+  description: Create and manage payment links.
+- name: Invoices
+  description: Create and manage invoices.
+- name: Subscription plans
+  description: Create and retrieve subscription plans.
+- name: Subscriptions
+  description: Create and manage subscriptions.
+- name: Agent payments
+  description: Verify requests paid through Mitu.
 paths:
   /v1/ping:
     get:
       operationId: ping
-      summary: Verify an API key and show what it resolves to
-      description: Confirms a key is valid, with no side effects.
-      tags: [Health]
+      summary: Health check
+      description: Check that your API key is valid and confirm that you can connect to the Mitu API.
+      tags:
+      - Health
       responses:
-        "200":
-          description: The key is valid.
+        '200':
+          description: API key verified successfully.
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/Ping" }
-
+              schema:
+                $ref: '#/components/schemas/PingResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
   /v1/customers:
     post:
       operationId: createCustomer
-      summary: Create a customer and issue their key
-      description: |
-        Safe to retry. The same `client_reference_id` always resolves to the
-        same customer, so a customer who later signs in through your own OAuth
-        is recognised rather than duplicated.
-
-        The customer key is returned once. Only its hash is stored.
-      tags: [Customers]
+      summary: Create a customer
+      description: Create a customer record and return the customer key used to connect that customer through MCP.
+      tags:
+      - Customers
       parameters:
-        - $ref: "#/components/parameters/IdempotencyKey"
+      - $ref: '#/components/parameters/IdempotencyKey'
       requestBody:
         required: true
         content:
           application/json:
-            schema: { $ref: "#/components/schemas/CreateCustomer" }
+            schema:
+              $ref: '#/components/schemas/CreateCustomer'
       responses:
-        "201":
-          description: The customer, with their key.
+        '201':
+          description: Customer created successfully.
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/IssuedCustomer" }
+              schema:
+                $ref: '#/components/schemas/IssuedCustomerResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
     get:
       operationId: listCustomers
       summary: List customers
-      tags: [Customers]
+      tags:
+      - Customers
       parameters:
-        - $ref: "#/components/parameters/Page"
-        - $ref: "#/components/parameters/Limit"
-        - name: search
-          in: query
-          description: Match name, email or phone.
-          schema: { type: string, maxLength: 120 }
+      - name: search
+        in: query
+        description: Filter customers by name, email address or phone number.
+        schema:
+          type: string
+          maxLength: 120
+      - $ref: '#/components/parameters/Limit'
+      - $ref: '#/components/parameters/Cursor'
       responses:
-        "200":
-          description: A page of customers.
+        '200':
+          description: Customers retrieved successfully.
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/CustomerPage" }
-
+              schema:
+                $ref: '#/components/schemas/CustomerListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+      description: Retrieve customers associated with your account. Results are returned using cursor-based pagination.
   /v1/customers/{id}:
     get:
       operationId: getCustomer
       summary: Get a customer
-      tags: [Customers]
+      tags:
+      - Customers
       parameters:
-        - $ref: "#/components/parameters/PathId"
+      - $ref: '#/components/parameters/PathId'
       responses:
-        "200":
-          description: The customer.
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/Customer" }
-
-  /v1/customers/{id}/wallets:
-    post:
-      operationId: createCustomerWallet
-      summary: Create a named wallet for a customer
-      description: |
-        For a second wallet onwards. The first wallet needs no call: it appears
-        the moment the customer's agent asks for a balance.
-
-        A wallet created without `limits` inherits the limits already on the
-        wallet this customer started with.
-      tags: [Agent Wallets]
-      parameters:
-        - $ref: "#/components/parameters/PathId"
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: { $ref: "#/components/schemas/CreateWallet" }
-      responses:
-        "201":
-          description: The wallet, with its funding addresses.
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/Wallet" }
-        "503":
-          description: The wallet service is unavailable.
-    get:
-      operationId: listCustomerWallets
-      summary: Every named wallet this customer holds
-      tags: [Agent Wallets]
-      parameters:
-        - $ref: "#/components/parameters/PathId"
-      responses:
-        "200":
-          description: The customer's wallets and their limits.
+        '200':
+          description: Customer retrieved successfully.
           content:
             application/json:
               schema:
-                type: array
-                items: { $ref: "#/components/schemas/WalletSummary" }
-
+                $ref: '#/components/schemas/CustomerResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+      description: Retrieve a customer by its Mitu customer ID.
+  /v1/customers/{id}/wallets:
+    post:
+      operationId: createCustomerWallet
+      summary: Create a wallet
+      description: Create an additional named Agent Wallet for a customer.
+      tags:
+      - Agent Wallets
+      parameters:
+      - $ref: '#/components/parameters/IdempotencyKey'
+      - $ref: '#/components/parameters/PathId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateWallet'
+      responses:
+        '201':
+          description: Wallet created successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WalletResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+    get:
+      operationId: listCustomerWallets
+      summary: Get wallets
+      tags:
+      - Agent Wallets
+      parameters:
+      - $ref: '#/components/parameters/PathId'
+      - $ref: '#/components/parameters/Limit'
+      - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: Wallets retrieved successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WalletListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+      description: Retrieve the Agent Wallets associated with a customer. Results are returned using cursor-based
+        pagination.
+  /v1/wallets/{id}:
+    get:
+      operationId: getWallet
+      summary: Get a wallet
+      description: Retrieve a single Agent Wallet by its ID, including the deposit addresses held for it on each
+        supported network.
+      tags:
+      - Agent Wallets
+      parameters:
+      - $ref: '#/components/parameters/PathId'
+      responses:
+        '200':
+          description: Wallet retrieved successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WalletResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+  /v1/wallets/{id}/transactions:
+    get:
+      operationId: listWalletTransactions
+      summary: List wallet transactions
+      description: Retrieve the credits and debits recorded against an Agent Wallet, newest first. Results are
+        returned using cursor-based pagination.
+      tags:
+      - Agent Wallets
+      parameters:
+      - $ref: '#/components/parameters/PathId'
+      - name: type
+        in: query
+        description: Filter by the direction of the movement.
+        schema:
+          type: string
+          enum:
+          - credit
+          - debit
+      - name: reason
+        in: query
+        description: Filter by why the movement happened.
+        schema:
+          $ref: '#/components/schemas/WalletTransactionReason'
+      - $ref: '#/components/parameters/Limit'
+      - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: Wallet transactions retrieved successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WalletTransactionListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+  /v1/wallet-transactions/{id}:
+    get:
+      operationId: getWalletTransaction
+      summary: Get a wallet transaction
+      description: Retrieve a single wallet movement by its ID. Use this to resolve the `wallet_transaction_id`
+        returned by a paid request, or the `transaction_id` carried on a `wallet.credited` or `wallet.debited`
+        event, without needing the wallet it belongs to.
+      tags:
+      - Agent Wallets
+      parameters:
+      - $ref: '#/components/parameters/PathId'
+      responses:
+        '200':
+          description: Wallet transaction retrieved successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WalletTransactionResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
   /v1/payment-links:
     post:
       operationId: createPaymentLink
-      summary: Create a payment link
-      tags: [Payment links]
+      summary: Create a link
+      tags:
+      - Payment links
       requestBody:
         required: true
         content:
           application/json:
-            schema: { $ref: "#/components/schemas/CreatePaymentLink" }
+            schema:
+              $ref: '#/components/schemas/CreatePaymentLink'
       responses:
-        "201":
-          description: The payment link, including `checkoutUrl`.
+        '201':
+          description: Payment link created successfully.
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/PaymentLink" }
+              schema:
+                $ref: '#/components/schemas/PaymentLinkResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+      description: Create a payment link that can be completed through the supported payment experience.
+      parameters:
+      - $ref: '#/components/parameters/IdempotencyKey'
     get:
       operationId: listPaymentLinks
-      summary: List payment links
-      tags: [Payment links]
+      summary: List links
+      tags:
+      - Payment links
       parameters:
-        - $ref: "#/components/parameters/Page"
-        - $ref: "#/components/parameters/Limit"
-        - name: type
-          in: query
-          schema: { $ref: "#/components/schemas/PaymentLinkType" }
-        - name: status
-          in: query
-          schema: { $ref: "#/components/schemas/PaymentLinkStatus" }
-        - name: reference
-          in: query
-          schema: { type: string }
-        - name: source
-          in: query
-          description: >-
-            Omitted, the list leaves out links raised for a commerce sale. Pass
-            `commerce` to see only those.
-          schema: { type: string, enum: [dashboard, api, commerce] }
+      - name: type
+        in: query
+        schema:
+          $ref: '#/components/schemas/PaymentLinkType'
+        description: Filter by payment link type.
+      - name: status
+        in: query
+        schema:
+          $ref: '#/components/schemas/PaymentLinkStatus'
+        description: Filter by payment link status.
+      - name: reference
+        in: query
+        schema:
+          type: string
+        description: Filter by your payment reference.
+      - name: source
+        in: query
+        description: Filter by the source that created the payment link.
+        schema:
+          type: string
+          enum:
+          - dashboard
+          - api
+          - commerce
+      - $ref: '#/components/parameters/Limit'
+      - $ref: '#/components/parameters/Cursor'
       responses:
-        "200":
-          description: A page of payment links.
+        '200':
+          description: Payment links retrieved successfully.
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/PaymentLinkPage" }
-
+              schema:
+                $ref: '#/components/schemas/PaymentLinkListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+      description: Retrieve payment links created by your account. Results are returned using cursor-based pagination.
   /v1/payment-links/{id}:
     get:
       operationId: getPaymentLink
-      summary: Get a payment link
-      tags: [Payment links]
+      summary: Get a link
+      tags:
+      - Payment links
       parameters:
-        - $ref: "#/components/parameters/PathId"
+      - $ref: '#/components/parameters/PathId'
       responses:
-        "200":
-          description: The payment link.
+        '200':
+          description: Payment link retrieved successfully.
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/PaymentLink" }
+              schema:
+                $ref: '#/components/schemas/PaymentLinkResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+      description: Retrieve a payment link by its ID.
     patch:
       operationId: updatePaymentLink
-      summary: Update a payment link
-      tags: [Payment links]
+      summary: Update a link
+      tags:
+      - Payment links
       parameters:
-        - $ref: "#/components/parameters/PathId"
+      - $ref: '#/components/parameters/PathId'
       requestBody:
         required: true
         content:
           application/json:
-            schema: { $ref: "#/components/schemas/UpdatePaymentLink" }
+            schema:
+              $ref: '#/components/schemas/UpdatePaymentLink'
       responses:
-        "200":
-          description: The updated payment link.
+        '200':
+          description: Payment link updated successfully.
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/PaymentLink" }
-        "409":
-          description: The link was raised for a sale and cannot be changed here.
-
+              schema:
+                $ref: '#/components/schemas/PaymentLinkResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+      description: Update fields on an existing payment link that is still editable.
   /v1/payment-links/{id}/cancel:
     delete:
       operationId: cancelPaymentLink
-      summary: Cancel a payment link
-      description: Only a `pending`, `partial` or `active` link can be cancelled.
-      tags: [Payment links]
+      summary: Cancel a link
+      description: Cancel a payment link that is currently cancellable.
+      tags:
+      - Payment links
       parameters:
-        - $ref: "#/components/parameters/PathId"
+      - $ref: '#/components/parameters/PathId'
       responses:
-        "200":
-          description: The cancelled payment link.
+        '200':
+          description: Payment link cancelled successfully.
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/PaymentLink" }
-        "409":
-          description: The link was raised for a sale, or is not cancellable.
-
+              schema:
+                $ref: '#/components/schemas/PaymentLinkResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
   /v1/invoices:
     post:
       operationId: createInvoice
       summary: Create an invoice
-      tags: [Invoices]
+      tags:
+      - Invoices
       requestBody:
         required: true
         content:
           application/json:
-            schema: { $ref: "#/components/schemas/CreateInvoice" }
+            schema:
+              $ref: '#/components/schemas/CreateInvoice'
       responses:
-        "201":
-          description: The invoice, including `checkoutUrl`.
+        '201':
+          description: Invoice created successfully.
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/Invoice" }
+              schema:
+                $ref: '#/components/schemas/InvoiceResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+      description: Create an invoice for a customer.
+      parameters:
+      - $ref: '#/components/parameters/IdempotencyKey'
     get:
       operationId: listInvoices
       summary: List invoices
-      tags: [Invoices]
+      tags:
+      - Invoices
       parameters:
-        - $ref: "#/components/parameters/Page"
-        - $ref: "#/components/parameters/Limit"
-        - name: status
-          in: query
-          schema: { $ref: "#/components/schemas/InvoiceStatus" }
-        - name: customerId
-          in: query
-          description: Only invoices for this customer.
-          schema: { type: string }
+      - name: status
+        in: query
+        schema:
+          $ref: '#/components/schemas/InvoiceStatus'
+        description: Filter by invoice status.
+      - name: customer_id
+        in: query
+        description: Return invoices for a specific customer.
+        schema:
+          type: string
+      - $ref: '#/components/parameters/Limit'
+      - $ref: '#/components/parameters/Cursor'
       responses:
-        "200":
-          description: A page of invoices.
+        '200':
+          description: Invoices retrieved successfully.
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/InvoicePage" }
-
+              schema:
+                $ref: '#/components/schemas/InvoiceListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+      description: Retrieve invoices created by your account. Results are returned using cursor-based pagination.
   /v1/invoices/{id}:
     get:
       operationId: getInvoice
       summary: Get an invoice
-      tags: [Invoices]
+      tags:
+      - Invoices
       parameters:
-        - $ref: "#/components/parameters/PathId"
+      - $ref: '#/components/parameters/PathId'
       responses:
-        "200":
-          description: The invoice.
+        '200':
+          description: Invoice retrieved successfully.
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/Invoice" }
+              schema:
+                $ref: '#/components/schemas/InvoiceResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+      description: Retrieve an invoice by its ID.
     patch:
       operationId: updateInvoice
       summary: Update an invoice
-      tags: [Invoices]
+      tags:
+      - Invoices
       parameters:
-        - $ref: "#/components/parameters/PathId"
+      - $ref: '#/components/parameters/PathId'
       requestBody:
         required: true
         content:
           application/json:
-            schema: { $ref: "#/components/schemas/UpdateInvoice" }
+            schema:
+              $ref: '#/components/schemas/UpdateInvoice'
       responses:
-        "200":
-          description: The updated invoice.
+        '200':
+          description: Invoice updated successfully.
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/Invoice" }
-
+              schema:
+                $ref: '#/components/schemas/InvoiceResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+      description: Update an invoice that is still editable.
   /v1/invoices/{id}/send:
     post:
       operationId: sendInvoice
-      summary: Send an invoice to its recipient
-      tags: [Invoices]
+      summary: Send an invoice
+      tags:
+      - Invoices
       parameters:
-        - $ref: "#/components/parameters/PathId"
+      - $ref: '#/components/parameters/PathId'
       responses:
-        "200":
-          description: The sent invoice.
+        '200':
+          description: Invoice sent successfully.
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/Invoice" }
-
+              schema:
+                $ref: '#/components/schemas/InvoiceResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+      description: Send an invoice to its recipient.
   /v1/invoices/{id}/cancel:
     delete:
       operationId: cancelInvoice
       summary: Cancel an invoice
-      tags: [Invoices]
+      tags:
+      - Invoices
       parameters:
-        - $ref: "#/components/parameters/PathId"
+      - $ref: '#/components/parameters/PathId'
       responses:
-        "200":
-          description: The cancelled invoice.
+        '200':
+          description: Invoice cancelled successfully.
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/Invoice" }
-
+              schema:
+                $ref: '#/components/schemas/InvoiceResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+      description: Cancel an invoice that is currently cancellable.
   /v1/subscription-plans:
     post:
       operationId: createSubscriptionPlan
-      summary: Create a subscription plan
-      tags: [Subscription plans]
+      summary: Create a plan
+      tags:
+      - Subscription plans
       requestBody:
         required: true
         content:
           application/json:
-            schema: { $ref: "#/components/schemas/CreateSubscriptionPlan" }
+            schema:
+              $ref: '#/components/schemas/CreateSubscriptionPlan'
       responses:
-        "201":
-          description: The subscription plan.
+        '201':
+          description: Subscription plan created successfully.
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/SubscriptionPlan" }
+              schema:
+                $ref: '#/components/schemas/SubscriptionPlanResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+      description: Create a subscription plan that can be used to start subscriptions.
+      parameters:
+      - $ref: '#/components/parameters/IdempotencyKey'
     get:
       operationId: listSubscriptionPlans
-      summary: List subscription plans
-      tags: [Subscription plans]
+      summary: List plans
+      tags:
+      - Subscription plans
       parameters:
-        - $ref: "#/components/parameters/Page"
-        - $ref: "#/components/parameters/Limit"
-        - name: status
-          in: query
-          schema: { type: string, enum: [active, paused, archived] }
+      - name: status
+        in: query
+        schema:
+          type: string
+          enum:
+          - active
+          - paused
+          - archived
+        description: Filter by subscription plan status.
+      - $ref: '#/components/parameters/Limit'
+      - $ref: '#/components/parameters/Cursor'
       responses:
-        "200":
-          description: A page of subscription plans.
+        '200':
+          description: Subscription plans retrieved successfully.
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/SubscriptionPlanPage" }
-
+              schema:
+                $ref: '#/components/schemas/SubscriptionPlanListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+      description: Retrieve subscription plans created by your account. Results are returned using cursor-based
+        pagination.
   /v1/subscription-plans/{id}:
     get:
       operationId: getSubscriptionPlan
-      summary: Get a subscription plan
-      tags: [Subscription plans]
+      summary: Get a plan
+      tags:
+      - Subscription plans
       parameters:
-        - $ref: "#/components/parameters/PathId"
+      - $ref: '#/components/parameters/PathId'
       responses:
-        "200":
-          description: The subscription plan.
+        '200':
+          description: Subscription plan retrieved successfully.
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/SubscriptionPlan" }
-
+              schema:
+                $ref: '#/components/schemas/SubscriptionPlanResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+      description: Retrieve a subscription plan by its ID.
   /v1/subscriptions:
     post:
       operationId: createSubscription
       summary: Create a subscription
-      tags: [Subscriptions]
+      tags:
+      - Subscriptions
       requestBody:
         required: true
         content:
           application/json:
-            schema: { $ref: "#/components/schemas/CreateSubscription" }
+            schema:
+              $ref: '#/components/schemas/CreateSubscription'
       responses:
-        "201":
-          description: The subscription.
+        '201':
+          description: Subscription created successfully.
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/Subscription" }
+              schema:
+                $ref: '#/components/schemas/SubscriptionResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+      description: Create a subscription from an existing subscription plan.
+      parameters:
+      - $ref: '#/components/parameters/IdempotencyKey'
     get:
       operationId: listSubscriptions
       summary: List subscriptions
-      tags: [Subscriptions]
+      tags:
+      - Subscriptions
       parameters:
-        - $ref: "#/components/parameters/Page"
-        - $ref: "#/components/parameters/Limit"
-        - name: status
-          in: query
-          schema: { $ref: "#/components/schemas/SubscriptionStatus" }
-        - name: subscriptionPlanId
-          in: query
-          schema: { type: string }
+      - name: status
+        in: query
+        schema:
+          $ref: '#/components/schemas/SubscriptionStatus'
+        description: Filter by subscription status.
+      - name: subscription_plan_id
+        in: query
+        schema:
+          type: string
+        description: Return subscriptions for a specific subscription plan.
+      - $ref: '#/components/parameters/Limit'
+      - $ref: '#/components/parameters/Cursor'
       responses:
-        "200":
-          description: A page of subscriptions.
+        '200':
+          description: Subscriptions retrieved successfully.
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/SubscriptionPage" }
-
+              schema:
+                $ref: '#/components/schemas/SubscriptionListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+      description: Retrieve subscriptions associated with your account. Results are returned using cursor-based
+        pagination.
   /v1/subscriptions/{id}:
     get:
       operationId: getSubscription
       summary: Get a subscription
-      tags: [Subscriptions]
+      tags:
+      - Subscriptions
       parameters:
-        - $ref: "#/components/parameters/PathId"
+      - $ref: '#/components/parameters/PathId'
       responses:
-        "200":
-          description: The subscription.
+        '200':
+          description: Subscription retrieved successfully.
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/Subscription" }
-
+              schema:
+                $ref: '#/components/schemas/SubscriptionResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+      description: Retrieve a subscription by its ID.
   /v1/subscriptions/{id}/cancel:
     post:
       operationId: cancelSubscription
       summary: Cancel a subscription
-      tags: [Subscriptions]
+      tags:
+      - Subscriptions
       parameters:
-        - $ref: "#/components/parameters/PathId"
+      - $ref: '#/components/parameters/PathId'
       responses:
-        "200":
-          description: The cancelled subscription.
+        '200':
+          description: Subscription cancelled successfully.
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/Subscription" }
-
+              schema:
+                $ref: '#/components/schemas/SubscriptionResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+      description: Cancel an active subscription.
   /v1/subscriptions/{id}/invoices:
     get:
       operationId: listSubscriptionInvoices
-      summary: List invoices for a subscription
-      tags: [Subscriptions]
+      summary: List invoices
+      tags:
+      - Subscriptions
       parameters:
-        - $ref: "#/components/parameters/PathId"
-        - $ref: "#/components/parameters/Page"
-        - $ref: "#/components/parameters/Limit"
+      - $ref: '#/components/parameters/PathId'
+      - $ref: '#/components/parameters/Limit'
+      - $ref: '#/components/parameters/Cursor'
       responses:
-        "200":
-          description: A page of subscription invoices.
+        '200':
+          description: Subscription invoices retrieved successfully.
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/SubscriptionInvoicePage" }
-
+              schema:
+                $ref: '#/components/schemas/SubscriptionInvoiceListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+      description: Retrieve invoices generated for a subscription. Results are returned using cursor-based pagination.
   /v1/proxy-requests/{id}:
     get:
       operationId: getProxyRequest
-      summary: Confirm a proxied request was paid
-      description: |
-        Look up a paid request by the `x-mitu-request-id` your API received, to
-        confirm independently that it was paid before doing work for it.
-      tags: [Agent payments]
+      summary: Confirm a paid request
+      description: Retrieve a paid request by the Mitu request ID received by your API.
+      tags:
+      - Agent payments
       parameters:
-        - $ref: "#/components/parameters/PathId"
+      - $ref: '#/components/parameters/PathId'
       responses:
-        "200":
-          description: The proxied request.
+        '200':
+          description: Paid request retrieved successfully.
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/ProxyRequest" }
-
+              schema:
+                $ref: '#/components/schemas/ProxyRequestResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
 components:
   securitySchemes:
     ApiKey:
       type: apiKey
       in: header
       name: x-api-key
-      description: Account API key, `sk_live_...`
-
+      description: Account API key used to authenticate server-side requests. Use the credentials issued for the
+        same environment as the API base URL.
   parameters:
     PathId:
       name: id
       in: path
       required: true
-      schema: { type: string }
-    Page:
-      name: page
-      in: query
-      schema: { type: integer, minimum: 1, default: 1 }
+      schema:
+        type: string
+      description: Unique identifier of the resource.
     Limit:
       name: limit
       in: query
-      schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+      required: false
+      description: Maximum number of records to return.
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 20
     IdempotencyKey:
-      name: idempotency-key
+      name: Idempotency-Key
       in: header
-      description: Retry safely. A repeated key replays the first result.
-      schema: { type: string }
-
+      required: false
+      description: Unique key used to safely retry the same state-changing request.
+      schema:
+        type: string
+        maxLength: 255
+    Cursor:
+      name: cursor
+      in: query
+      required: false
+      description: Cursor returned as `next_cursor` from the previous response. Omit for the first request.
+      schema:
+        type: string
   schemas:
     PaymentLinkType:
       type: string
-      enum: [charge, subscription, session, per_request]
+      enum:
+      - charge
+      - subscription
+      - session
+      - per_request
     PaymentLinkStatus:
       type: string
-      enum: [pending, partial, active, settling, paid, settled, expired, cancelled]
+      enum:
+      - pending
+      - partial
+      - active
+      - settling
+      - paid
+      - settled
+      - expired
+      - cancelled
     PaymentMethod:
       type: string
-      enum: [x402, mpp_crypto, mpp_spt]
+      enum:
+      - x402
+      - mpp_crypto
+      - mpp_spt
     InvoiceStatus:
       type: string
-      enum: [draft, sent, viewed, settling, paid, overdue, cancelled]
+      enum:
+      - draft
+      - sent
+      - viewed
+      - settling
+      - paid
+      - overdue
+      - cancelled
     BillingInterval:
       type: string
-      enum: [day, week, month, year]
+      enum:
+      - day
+      - week
+      - month
+      - year
     SubscriptionStatus:
       type: string
-      enum: [active, past_due, paused, cancelled, expired]
-
+      enum:
+      - active
+      - past_due
+      - paused
+      - cancelled
+      - expired
     CreateCustomer:
       type: object
-      required: [client_reference_id]
+      required:
+      - client_reference_id
       properties:
         client_reference_id:
           type: string
-          maxLength: 64
+          max_length: 64
           example: goro_user_8841
-          description: Your own id for this person.
-        first_name: { type: string, maxLength: 60, example: Tele }
-        last_name: { type: string, maxLength: 60, example: Falola }
-        email: { type: string, format: email, maxLength: 180, example: tele@mitu.ai }
-        phone: { type: string, maxLength: 32, example: "+2348012345678" }
-
+          description: Your own stable identifier for this customer.
+        first_name:
+          type: string
+          max_length: 60
+          example: Tele
+        last_name:
+          type: string
+          max_length: 60
+          example: Falola
+        email:
+          type: string
+          format: email
+          max_length: 180
+          example: tele@mitu.ai
+        phone:
+          type: string
+          max_length: 32
+          example: '+2348012345678'
       example:
         client_reference_id: goro_user_8841
         first_name: Tele
         last_name: Falola
         email: tele@mitu.ai
-        phone: "+2348012345678"
+        phone: '+2348012345678'
     IssuedCustomer:
       type: object
       properties:
-        id: { type: string }
-        client_reference_id: { type: string }
-        first_name: { type: string, nullable: true }
-        last_name: { type: string, nullable: true }
-        email: { type: string, nullable: true }
-        phone: { type: string, nullable: true }
+        id:
+          type: string
+        client_reference_id:
+          type: string
+          description: Your own stable identifier for this customer.
+        first_name:
+          type: string
+          nullable: true
+        last_name:
+          type: string
+          nullable: true
+        email:
+          type: string
+          nullable: true
+        phone:
+          type: string
+          nullable: true
         key:
           type: string
-          description: The customer key, returned once. Only its hash is stored.
-          example: mcpk_...
-        mcp_url: { type: string }
-        created_at: { type: string, format: date-time }
+          description: Customer key returned when the customer is created.
+          example: mcpk_7f3a9c2e5b14d806a1f2
+        mcp_url:
+          type: string
+        created_at:
+          type: string
+          format: date-time
       example:
         id: cus_0t9549fps3xd
         client_reference_id: goro_user_8841
         first_name: Tele
         last_name: Falola
         email: tele@mitu.ai
-        phone: "+2348012345678"
+        phone: '+2348012345678'
         key: mcpk_live_7f3a9c2e5b14d806a1f2
         mcp_url: https://mcp.mitu.ai/goro
-        created_at: "2026-09-09T18:41:50.204Z"
-
+        created_at: '2026-09-09T18:41:50.204Z'
     WalletLimits:
       type: object
-      description: >-
-        What an agent may spend from this wallet, in USD. Zero is an explicit
-        "no limit"; an omitted field keeps whatever the wallet inherited.
+      description: What an agent may spend from this wallet, in USD. Zero is an explicit "no limit"; an omitted
+        field keeps whatever the wallet inherited.
       properties:
-        per_payment: { type: number, minimum: 0, example: 25 }
-        monthly: { type: number, minimum: 0, example: 200 }
-        approve_above: { type: number, minimum: 0, example: 50 }
-
+        per_payment:
+          type: number
+          minimum: 0
+          example: 25
+        monthly:
+          type: number
+          minimum: 0
+          example: 200
+        approve_above:
+          type: number
+          minimum: 0
+          example: 50
     CreateWallet:
       type: object
-      required: [name]
+      required:
+      - name
       properties:
         name:
           type: string
-          maxLength: 80
+          max_length: 80
           example: Travel
-          description: >-
-            What the customer calls this pot. The agent names it when paying,
-            so it should read the way the customer would say it.
-        limits: { $ref: "#/components/schemas/WalletLimits" }
-
+          description: What the customer calls this pot. The agent names it when paying, so it should read the way
+            the customer would say it.
+        limits:
+          $ref: '#/components/schemas/WalletLimits'
       example:
         name: Travel
         limits:
@@ -595,30 +1186,41 @@ components:
     WalletSummary:
       type: object
       properties:
-        id: { type: string }
-        customer_id: { type: string }
-        name: { type: string }
-        currency: { type: string, example: USDC }
+        id:
+          type: string
+        customer_id:
+          type: string
+        name:
+          type: string
+        currency:
+          type: string
+          example: USDC
         limits:
-          allOf:
-            - $ref: "#/components/schemas/WalletLimits"
-            - type: object
-              properties:
-                currency: { type: string, example: USD }
-        created_at: { type: string, format: date-time }
-
+          all_of:
+          - $ref: '#/components/schemas/WalletLimits'
+          - type: object
+            properties:
+              currency:
+                type: string
+                example: USD
+        created_at:
+          type: string
+          format: date-time
     Wallet:
-      allOf:
-        - $ref: "#/components/schemas/WalletSummary"
-        - type: object
-          properties:
-            addresses:
-              type: array
-              items:
-                type: object
-                properties:
-                  network: { type: string, example: base }
-                  address: { type: string }
+      all_of:
+      - $ref: '#/components/schemas/WalletSummary'
+      - type: object
+        properties:
+          addresses:
+            type: array
+            items:
+              type: object
+              properties:
+                network:
+                  type: string
+                  example: base
+                address:
+                  type: string
       example:
         id: wal_65286515b43d4e3eba93
         customer_id: cus_0t9549fps3xd
@@ -630,84 +1232,199 @@ components:
           approve_above: 50
           currency: USD
         addresses:
-          - network: base
-            address: "0xa90818aeC6b04b6E48c9bD7A5C0d8B3F17e2419d"
-          - network: tempo
-            address: "0xa90818aeC6b04b6E48c9bD7A5C0d8B3F17e2419d"
-          - network: solana
-            address: 7U6P9CrM7CqkYyNbBLpKfoJcWn4sVz1TgDxMhRa2EuQK
-        created_at: "2026-09-11T00:32:58.292Z"
-
+        - network: base
+          address: '0xa90818aeC6b04b6E48c9bD7A5C0d8B3F17e2419d'
+        - network: tempo
+          address: '0xa90818aeC6b04b6E48c9bD7A5C0d8B3F17e2419d'
+        - network: solana
+          address: 7U6P9CrM7CqkYyNbBLpKfoJcWn4sVz1TgDxMhRa2EuQK
+        created_at: '2026-09-11T00:32:58.292Z'
+    WalletTransactionReason:
+      type: string
+      enum:
+      - deposit
+      - payment
+      - withdrawal
+      - reversal
+    WalletTransactionDestination:
+      type: object
+      properties:
+        type:
+          type: string
+          enum:
+          - merchant
+          - external
+        name:
+          type: string
+          nullable: true
+        address:
+          type: string
+          nullable: true
+    WalletTransaction:
+      type: object
+      description: One movement of money into or out of an Agent Wallet. `balance_after` is the balance of this
+        wallet alone, not the customer's combined balance across wallets.
+      properties:
+        id:
+          type: string
+        wallet_id:
+          type: string
+        customer_id:
+          type: string
+        type:
+          type: string
+          enum:
+          - credit
+          - debit
+        reason:
+          $ref: '#/components/schemas/WalletTransactionReason'
+        amount:
+          type: string
+          description: Decimal amount, sent as a string.
+        currency:
+          type: string
+          example: USDC
+        network:
+          type: string
+          nullable: true
+          example: base
+        destination:
+          oneOf:
+          - $ref: '#/components/schemas/WalletTransactionDestination'
+          - type: 'null'
+          description: Where a debit went. `null` for credits.
+        tx_hash:
+          type: string
+          nullable: true
+          description: The onchain settlement you can verify yourself.
+        balance_after:
+          type: string
+          description: The wallet's balance once this movement was applied.
+        created_at:
+          type: string
+          format: date-time
+      example:
+        id: f5533e85-16d8-4f58-ba22-86dba59c6a15
+        wallet_id: wal_65286515b43d4e3eba93
+        customer_id: cus_0t9549fps3xd
+        type: debit
+        reason: payment
+        amount: '0.035000'
+        currency: USDC
+        network: base
+        destination:
+          type: merchant
+          name: AgentPizza
+          address: '0x1DDb114B971E67241B3aF19C958a01EBBfb1B6DD'
+        tx_hash: '0xfe093b9a57695615cc453f86b2890eb70e0a2860ce040f54af7aca03ce2a89ab'
+        balance_after: '0.032000'
+        created_at: '2026-09-09T19:03:28.480Z'
     CreatePaymentLink:
       type: object
       properties:
         type:
-          allOf: [{ $ref: "#/components/schemas/PaymentLinkType" }]
+          all_of:
+          - $ref: '#/components/schemas/PaymentLinkType'
           default: charge
         amount:
           type: number
-          description: >-
-            Required for `charge` and `per_request`. `session` uses
-            `sessionMaxDeposit`; `subscription` derives it from the plan.
+          description: Required for `charge` and `per_request`. `session` uses `sessionMaxDeposit`; `subscription`
+            derives it from the plan.
         currency:
           type: string
           example: NGN
           description: Required except for `subscription`, which takes it from the plan.
-        planId: { type: string, description: subscription only — a single plan id. }
-        planIds:
+        plan_id:
+          type: string
+          description: subscription only — a single plan id.
+        plan_ids:
           type: array
-          items: { type: string }
+          items:
+            type: string
           description: subscription only — offer several plans for the payer to pick.
-        allowCustomerChoice:
+        allow_customer_choice:
           type: boolean
           default: false
           description: subscription only — let the payer choose among `planIds`.
-        description: { type: string, maxLength: 2000 }
-        reference: { type: string, maxLength: 255, description: Your own order id. }
-        expiresAt: { type: string, format: date-time }
-        endpointPattern: { type: string, maxLength: 500, description: per_request only. }
-        sessionMaxDeposit: { type: number, description: session only. }
-        sessionExpiresAt: { type: string, format: date-time, description: session only. }
-        paymentMethods:
+        description:
+          type: string
+          max_length: 2000
+        reference:
+          type: string
+          max_length: 255
+          description: Your own reference for this payment.
+        expires_at:
+          type: string
+          format: date-time
+        endpoint_pattern:
+          type: string
+          max_length: 500
+          description: per_request only.
+        session_max_deposit:
+          type: number
+          description: session only.
+        session_expires_at:
+          type: string
+          format: date-time
+          description: session only.
+        payment_methods:
           type: array
-          items: { $ref: "#/components/schemas/PaymentMethod" }
+          items:
+            $ref: '#/components/schemas/PaymentMethod'
         metadata:
           type: object
-          additionalProperties: { type: string }
-          description: Free-form metadata, returned with the payment.
-
+          additional_properties:
+            type: string
+          description: Free-form metadata returned with the payment.
       example:
         type: charge
         amount: 25
         currency: USD
         description: Two large pizzas
         reference: ORDER-8841
-        paymentMethods: [x402, mpp_crypto]
+        payment_methods:
+        - x402
+        - mpp_crypto
         metadata:
-          order_id: "8841"
+          order_id: '8841'
     UpdatePaymentLink:
       type: object
       properties:
-        expiresAt: { type: string, format: date-time }
-        description: { type: string, maxLength: 2000 }
-        reference: { type: string, maxLength: 255 }
+        expires_at:
+          type: string
+          format: date-time
+        description:
+          type: string
+          max_length: 2000
+        reference:
+          type: string
+          max_length: 255
         metadata:
           type: object
-          additionalProperties: { type: string }
-
+          additional_properties:
+            type: string
       example:
         description: Two large pizzas and a side
         reference: ORDER-8841
-        expiresAt: "2026-09-30T23:59:59.000Z"
+        expires_at: '2026-09-30T23:59:59.000Z'
     InvoiceLineItem:
       type: object
-      required: [name, quantity, amount]
+      required:
+      - name
+      - quantity
+      - amount
       properties:
-        name: { type: string, maxLength: 255 }
-        description: { type: string, maxLength: 500 }
-        quantity: { type: integer, minimum: 1 }
-        amount: { type: number }
-
+        name:
+          type: string
+          max_length: 255
+        description:
+          type: string
+          max_length: 500
+        quantity:
+          type: integer
+          minimum: 1
+        amount:
+          type: number
       example:
         name: Integration support
         description: 10 hours
@@ -715,399 +1432,928 @@ components:
         amount: 150
     CreateInvoice:
       type: object
-      required: [customerId, lineItems, currency]
+      required:
+      - customer_id
+      - line_items
+      - currency
       properties:
-        customerId: { type: string, description: Who the invoice is addressed to. }
-        invoiceNumber: { type: string, maxLength: 50 }
-        description: { type: string, maxLength: 2000 }
-        lineItems:
+        customer_id:
+          type: string
+          description: Who the invoice is addressed to.
+        invoice_number:
+          type: string
+          max_length: 50
+        description:
+          type: string
+          max_length: 2000
+        line_items:
           type: array
-          minItems: 1
-          items: { $ref: "#/components/schemas/InvoiceLineItem" }
-        currency: { type: string, example: USD }
-        taxAmount: { type: number, minimum: 0, default: 0 }
-        discountAmount: { type: number, minimum: 0, default: 0 }
-        dueAt: { type: string, format: date-time }
-
+          min_items: 1
+          items:
+            $ref: '#/components/schemas/InvoiceLineItem'
+        currency:
+          type: string
+          example: USD
+        tax_amount:
+          type: number
+          minimum: 0
+          default: 0
+        discount_amount:
+          type: number
+          minimum: 0
+          default: 0
+        due_at:
+          type: string
+          format: date-time
       example:
-        customerId: cus_0t9549fps3xd
-        invoiceNumber: INV-2026-0041
+        customer_id: cus_0t9549fps3xd
+        invoice_number: INV-2026-0041
         description: September retainer
         currency: USD
-        lineItems:
-          - name: Integration support
-            description: 10 hours
-            quantity: 10
-            amount: 150
-        dueAt: "2026-09-30T23:59:59.000Z"
+        line_items:
+        - name: Integration support
+          description: 10 hours
+          quantity: 10
+          amount: 150
+        due_at: '2026-09-30T23:59:59.000Z'
     UpdateInvoice:
       type: object
       properties:
-        description: { type: string, maxLength: 2000 }
-        lineItems:
+        description:
+          type: string
+          max_length: 2000
+        line_items:
           type: array
-          minItems: 1
-          items: { $ref: "#/components/schemas/InvoiceLineItem" }
-        taxAmount: { type: number, minimum: 0 }
-        discountAmount: { type: number, minimum: 0 }
-        dueAt: { type: string, format: date-time }
-
+          min_items: 1
+          items:
+            $ref: '#/components/schemas/InvoiceLineItem'
+        tax_amount:
+          type: number
+          minimum: 0
+        discount_amount:
+          type: number
+          minimum: 0
+        due_at:
+          type: string
+          format: date-time
       example:
         description: September retainer (revised)
-        lineItems:
-          - name: Integration support
-            quantity: 12
-            amount: 150
-        dueAt: "2026-10-07T23:59:59.000Z"
+        line_items:
+        - name: Integration support
+          quantity: 12
+          amount: 150
+        due_at: '2026-10-07T23:59:59.000Z'
     CreateSubscriptionPlan:
       type: object
-      required: [name, amount, currency, billingInterval]
+      required:
+      - name
+      - amount
+      - currency
+      - billing_interval
       properties:
-        name: { type: string, maxLength: 255 }
-        description: { type: string, maxLength: 2000 }
-        amount: { type: number }
-        currency: { type: string, example: USD }
-        billingInterval: { $ref: "#/components/schemas/BillingInterval" }
+        name:
+          type: string
+          max_length: 255
+        description:
+          type: string
+          max_length: 2000
+        amount:
+          type: number
+        currency:
+          type: string
+          example: USD
+        billing_interval:
+          $ref: '#/components/schemas/BillingInterval'
         features:
           type: array
-          items: { type: string }
-
+          items:
+            type: string
       example:
         name: Pro
         description: For teams shipping agents in production
         amount: 49
         currency: USD
-        billingInterval: month
-        features: ["Unlimited agents", "Priority support"]
+        billing_interval: month
+        features:
+        - Unlimited agents
+        - Priority support
     CreateSubscription:
       type: object
-      required: [subscriptionPlanId, paymentMethod]
+      required:
+      - subscription_plan_id
+      - payment_method
       properties:
-        subscriptionPlanId: { type: string }
-        paymentMethod:
+        subscription_plan_id:
           type: string
-          enum: [mpp_crypto, mpp_spt]
+        payment_method:
+          type: string
+          enum:
+          - mpp_crypto
+          - mpp_spt
           description: Recurring charges settle over MPP.
-        subscriberId: { type: string, description: Agent or user id that subscribed. }
-        subscriberType:
+        subscriber_id:
           type: string
-          enum: [agent, user]
+          description: Agent or user id that subscribed.
+        subscriber_type:
+          type: string
+          enum:
+          - agent
+          - user
           default: agent
-
       example:
-        subscriptionPlanId: plan_3j8w2q7xr1md
-        paymentMethod: mpp_crypto
-        subscriberId: agt_5m1p8w3ldx7b
-        subscriberType: agent
+        subscription_plan_id: plan_3j8w2q7xr1md
+        payment_method: mpp_crypto
+        subscriber_id: agt_5m1p8w3ldx7b
+        subscriber_type: agent
     Ping:
       type: object
       properties:
-        ok: { type: boolean }
-        account_id: { type: string }
-        api_key_id: { type: string }
-        environment: { type: string }
-        scopes:
-          type: array
-          items: { type: string }
+        ok:
+          type: boolean
+        account_id:
+          type: string
+        environment:
+          type: string
+          example: production
       example:
         ok: true
         account_id: 8f14e45f-ceea-467a-9f0b-3c2d1a7b4e90
-        api_key_id: ak_7d2f9c1b4a83
-        environment: live
-        scopes: []
-
+        environment: production
     Customer:
       type: object
       properties:
-        id: { type: string }
-        externalRef:
+        id:
+          type: string
+        client_reference_id:
           type: string
           nullable: true
-          description: Your own id for this person, sent as `client_reference_id`.
-        name: { type: string, nullable: true }
-        firstName: { type: string, nullable: true }
-        lastName: { type: string, nullable: true }
-        email: { type: string, nullable: true }
-        phone: { type: string, nullable: true }
-        createdAt: { type: string, format: date-time }
-        updatedAt: { type: string, format: date-time }
+          description: Your own stable identifier for this customer.
+        name:
+          type: string
+          nullable: true
+        first_name:
+          type: string
+          nullable: true
+        last_name:
+          type: string
+          nullable: true
+        email:
+          type: string
+          nullable: true
+        phone:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
       example:
         id: cus_0t9549fps3xd
-        externalRef: goro_user_8841
+        client_reference_id: goro_user_8841
         name: Tele Falola
-        firstName: Tele
-        lastName: Falola
+        first_name: Tele
+        last_name: Falola
         email: tele@mitu.ai
-        phone: "+2348012345678"
-        createdAt: "2026-09-09T18:41:50.204Z"
-        updatedAt: "2026-09-09T18:41:50.204Z"
-
+        phone: '+2348012345678'
+        created_at: '2026-09-09T18:41:50.204Z'
+        updated_at: '2026-09-09T18:41:50.204Z'
     PaymentLink:
       type: object
       properties:
-        id: { type: string }
-        type: { $ref: "#/components/schemas/PaymentLinkType" }
-        status: { $ref: "#/components/schemas/PaymentLinkStatus" }
-        amount: { type: string, description: Decimal, sent as a string. }
-        amountPaid: { type: string }
-        currency: { type: string }
-        description: { type: string, nullable: true }
-        reference: { type: string, nullable: true }
-        endpointPattern: { type: string, nullable: true }
-        planIds:
+        id:
+          type: string
+        type:
+          $ref: '#/components/schemas/PaymentLinkType'
+        status:
+          $ref: '#/components/schemas/PaymentLinkStatus'
+        amount:
+          type: string
+          description: Decimal amount sent as a string.
+        amount_paid:
+          type: string
+        currency:
+          type: string
+        description:
+          type: string
+          nullable: true
+        reference:
+          type: string
+          nullable: true
+        endpoint_pattern:
+          type: string
+          nullable: true
+        plan_ids:
           type: array
           nullable: true
-          items: { type: string }
-        allowCustomerChoice: { type: boolean }
-        checkoutUrl:
+          items:
+            type: string
+        allow_customer_choice:
+          type: boolean
+        checkout_url:
           type: string
           description: The page a person opens to pay.
-        expiresAt: { type: string, format: date-time, nullable: true }
-        paidAt: { type: string, format: date-time, nullable: true }
-        settledAt: { type: string, format: date-time, nullable: true }
-        createdAt: { type: string, format: date-time }
-        updatedAt: { type: string, format: date-time }
+        expires_at:
+          type: string
+          format: date-time
+          nullable: true
+        paid_at:
+          type: string
+          format: date-time
+          nullable: true
+        settled_at:
+          type: string
+          format: date-time
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
       example:
         id: pay_n8d7piu1yc6h
         type: charge
         status: pending
-        amount: "25.00"
-        amountPaid: "0.00"
+        amount: '25.00'
+        amount_paid: '0.00'
         currency: USD
         description: Two large pizzas
         reference: ORDER-8841
-        endpointPattern: null
-        planIds: null
-        allowCustomerChoice: false
-        checkoutUrl: https://mitu.ai/pay/pay_n8d7piu1yc6h
-        expiresAt: null
-        paidAt: null
-        settledAt: null
-        createdAt: "2026-09-09T14:05:11.402Z"
-        updatedAt: "2026-09-09T14:05:11.402Z"
-
+        endpoint_pattern: null
+        plan_ids: null
+        allow_customer_choice: false
+        checkout_url: https://mitu.ai/pay/pay_n8d7piu1yc6h
+        expires_at: null
+        paid_at: null
+        settled_at: null
+        created_at: '2026-09-09T14:05:11.402Z'
+        updated_at: '2026-09-09T14:05:11.402Z'
     Invoice:
       type: object
       properties:
-        id: { type: string }
-        status: { $ref: "#/components/schemas/InvoiceStatus" }
-        customerId: { type: string, nullable: true }
-        invoiceNumber: { type: string, nullable: true }
-        description: { type: string, nullable: true }
-        lineItems:
+        id:
+          type: string
+        status:
+          $ref: '#/components/schemas/InvoiceStatus'
+        customer_id:
+          type: string
+          nullable: true
+        invoice_number:
+          type: string
+          nullable: true
+        description:
+          type: string
+          nullable: true
+        line_items:
           type: array
-          items: { $ref: "#/components/schemas/InvoiceLineItem" }
-        amount: { type: string }
-        currency: { type: string }
-        taxAmount: { type: string }
-        discountAmount: { type: string }
-        checkoutUrl: { type: string }
-        dueAt: { type: string, format: date-time, nullable: true }
-        sentAt: { type: string, format: date-time, nullable: true }
-        viewedAt: { type: string, format: date-time, nullable: true }
-        paidAt: { type: string, format: date-time, nullable: true }
-        createdAt: { type: string, format: date-time }
-        updatedAt: { type: string, format: date-time }
+          items:
+            $ref: '#/components/schemas/InvoiceLineItem'
+        amount:
+          type: string
+        currency:
+          type: string
+        tax_amount:
+          type: string
+        discount_amount:
+          type: string
+        checkout_url:
+          type: string
+        due_at:
+          type: string
+          format: date-time
+          nullable: true
+        sent_at:
+          type: string
+          format: date-time
+          nullable: true
+        viewed_at:
+          type: string
+          format: date-time
+          nullable: true
+        paid_at:
+          type: string
+          format: date-time
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
       example:
         id: inv_4k2m9x7ptw3c
         status: draft
-        customerId: cus_0t9549fps3xd
-        invoiceNumber: INV-2026-0041
+        customer_id: cus_0t9549fps3xd
+        invoice_number: INV-2026-0041
         description: September retainer
-        lineItems:
-          - name: Integration support
-            description: 10 hours
-            quantity: 10
-            amount: 150
-        amount: "1500.00"
+        line_items:
+        - name: Integration support
+          description: 10 hours
+          quantity: 10
+          amount: 150
+        amount: '1500.00'
         currency: USD
-        taxAmount: "0.00"
-        discountAmount: "0.00"
-        checkoutUrl: https://mitu.ai/invoice/inv_4k2m9x7ptw3c
-        dueAt: "2026-09-30T23:59:59.000Z"
-        sentAt: null
-        viewedAt: null
-        paidAt: null
-        createdAt: "2026-09-09T10:12:04.881Z"
-        updatedAt: "2026-09-09T10:12:04.881Z"
-
+        tax_amount: '0.00'
+        discount_amount: '0.00'
+        checkout_url: https://mitu.ai/invoice/inv_4k2m9x7ptw3c
+        due_at: '2026-09-30T23:59:59.000Z'
+        sent_at: null
+        viewed_at: null
+        paid_at: null
+        created_at: '2026-09-09T10:12:04.881Z'
+        updated_at: '2026-09-09T10:12:04.881Z'
     SubscriptionPlan:
       type: object
       properties:
-        id: { type: string }
-        name: { type: string }
-        description: { type: string, nullable: true }
-        amount: { type: string }
-        currency: { type: string }
-        billingInterval: { $ref: "#/components/schemas/BillingInterval" }
+        id:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+          nullable: true
+        amount:
+          type: string
+        currency:
+          type: string
+        billing_interval:
+          $ref: '#/components/schemas/BillingInterval'
         features:
           type: array
-          items: { type: string }
-        status: { type: string, enum: [active, paused, archived] }
-        createdAt: { type: string, format: date-time }
-        updatedAt: { type: string, format: date-time }
+          items:
+            type: string
+        status:
+          type: string
+          enum:
+          - active
+          - paused
+          - archived
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
       example:
         id: plan_3j8w2q7xr1md
         name: Pro
         description: For teams shipping agents in production
-        amount: "49.00"
+        amount: '49.00'
         currency: USD
-        billingInterval: month
-        features: ["Unlimited agents", "Priority support"]
+        billing_interval: month
+        features:
+        - Unlimited agents
+        - Priority support
         status: active
-        createdAt: "2026-09-01T09:00:00.000Z"
-        updatedAt: "2026-09-01T09:00:00.000Z"
-
+        created_at: '2026-09-01T09:00:00.000Z'
+        updated_at: '2026-09-01T09:00:00.000Z'
     Subscription:
       type: object
       properties:
-        id: { type: string }
-        subscriptionPlanId: { type: string }
-        status: { $ref: "#/components/schemas/SubscriptionStatus" }
-        subscriberId: { type: string, nullable: true }
-        subscriberType: { type: string, enum: [agent, user] }
-        paymentMethod: { type: string, enum: [mpp_crypto, mpp_spt] }
-        currentPeriodStart: { type: string, format: date-time }
-        currentPeriodEnd: { type: string, format: date-time }
-        nextBillingAt: { type: string, format: date-time, nullable: true }
-        startedAt: { type: string, format: date-time, nullable: true }
-        cancelledAt: { type: string, format: date-time, nullable: true }
-        endedAt: { type: string, format: date-time, nullable: true }
-        createdAt: { type: string, format: date-time }
-        updatedAt: { type: string, format: date-time }
+        id:
+          type: string
+        subscription_plan_id:
+          type: string
+        status:
+          $ref: '#/components/schemas/SubscriptionStatus'
+        subscriber_id:
+          type: string
+          nullable: true
+        subscriber_type:
+          type: string
+          enum:
+          - agent
+          - user
+        payment_method:
+          type: string
+          enum:
+          - mpp_crypto
+          - mpp_spt
+        current_period_start:
+          type: string
+          format: date-time
+        current_period_end:
+          type: string
+          format: date-time
+        next_billing_at:
+          type: string
+          format: date-time
+          nullable: true
+        started_at:
+          type: string
+          format: date-time
+          nullable: true
+        cancelled_at:
+          type: string
+          format: date-time
+          nullable: true
+        ended_at:
+          type: string
+          format: date-time
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
       example:
         id: sub_9c4t6z2vn8kq
-        subscriptionPlanId: plan_3j8w2q7xr1md
+        subscription_plan_id: plan_3j8w2q7xr1md
         status: active
-        subscriberId: agt_5m1p8w3ldx7b
-        subscriberType: agent
-        paymentMethod: mpp_crypto
-        currentPeriodStart: "2026-09-01T00:00:00.000Z"
-        currentPeriodEnd: "2026-10-01T00:00:00.000Z"
-        nextBillingAt: "2026-10-01T00:00:00.000Z"
-        startedAt: "2026-09-01T00:00:00.000Z"
-        cancelledAt: null
-        endedAt: null
-        createdAt: "2026-09-01T00:00:00.000Z"
-        updatedAt: "2026-09-01T00:00:00.000Z"
-
+        subscriber_id: agt_5m1p8w3ldx7b
+        subscriber_type: agent
+        payment_method: mpp_crypto
+        current_period_start: '2026-09-01T00:00:00.000Z'
+        current_period_end: '2026-10-01T00:00:00.000Z'
+        next_billing_at: '2026-10-01T00:00:00.000Z'
+        started_at: '2026-09-01T00:00:00.000Z'
+        cancelled_at: null
+        ended_at: null
+        created_at: '2026-09-01T00:00:00.000Z'
+        updated_at: '2026-09-01T00:00:00.000Z'
     SubscriptionInvoice:
       type: object
       properties:
-        id: { type: string }
-        subscriptionId: { type: string }
-        status: { type: string, enum: [pending, paid, failed, refunded, void] }
-        amount: { type: string }
-        currency: { type: string }
-        paymentMethod: { type: string, enum: [mpp_crypto, mpp_spt] }
-        periodStart: { type: string, format: date-time }
-        periodEnd: { type: string, format: date-time }
-        attempts: { type: integer }
-        dueAt: { type: string, format: date-time, nullable: true }
-        paidAt: { type: string, format: date-time, nullable: true }
-        createdAt: { type: string, format: date-time }
+        id:
+          type: string
+        subscription_id:
+          type: string
+        status:
+          type: string
+          enum:
+          - pending
+          - paid
+          - failed
+          - refunded
+          - void
+        amount:
+          type: string
+        currency:
+          type: string
+        payment_method:
+          type: string
+          enum:
+          - mpp_crypto
+          - mpp_spt
+        period_start:
+          type: string
+          format: date-time
+        period_end:
+          type: string
+          format: date-time
+        attempts:
+          type: integer
+        due_at:
+          type: string
+          format: date-time
+          nullable: true
+        paid_at:
+          type: string
+          format: date-time
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
       example:
         id: subinv_2h7k4d9qz3xw
-        subscriptionId: sub_9c4t6z2vn8kq
+        subscription_id: sub_9c4t6z2vn8kq
         status: paid
-        amount: "49.00"
+        amount: '49.00'
         currency: USD
-        paymentMethod: mpp_crypto
-        periodStart: "2026-09-01T00:00:00.000Z"
-        periodEnd: "2026-10-01T00:00:00.000Z"
+        payment_method: mpp_crypto
+        period_start: '2026-09-01T00:00:00.000Z'
+        period_end: '2026-10-01T00:00:00.000Z'
         attempts: 1
-        dueAt: "2026-09-01T00:00:00.000Z"
-        paidAt: "2026-09-01T00:04:12.660Z"
-        createdAt: "2026-09-01T00:00:00.000Z"
-
+        due_at: '2026-09-01T00:00:00.000Z'
+        paid_at: '2026-09-01T00:04:12.660Z'
+        created_at: '2026-09-01T00:00:00.000Z'
     ProxyRequest:
       type: object
-      description: >-
-        An amount is only recorded once money was actually taken, so `paid` is
-        the answer to "was this request paid".
+      description: An amount is only recorded once money was actually taken, so `paid` is the answer to "was this
+        request paid".
       properties:
-        request_id: { type: string }
-        service_id: { type: string }
-        paid: { type: boolean }
-        amount: { type: string, nullable: true }
-        currency: { type: string, nullable: true }
-        method: { type: string, nullable: true }
-        path: { type: string, nullable: true }
-        payment_method: { type: string, nullable: true }
+        request_id:
+          type: string
+        service_id:
+          type: string
+        paid:
+          type: boolean
+        amount:
+          type: string
+          nullable: true
+        currency:
+          type: string
+          nullable: true
+        method:
+          type: string
+          nullable: true
+        path:
+          type: string
+          nullable: true
+        payment_method:
+          type: string
+          nullable: true
         wallet_transaction_id:
           type: string
           nullable: true
           description: The settlement you can check on-chain yourself.
-        created_at: { type: string, format: date-time }
+        created_at:
+          type: string
+          format: date-time
       example:
         request_id: req_abc123
         service_id: svc_dhydwg80dzb4vy6xjl2m
         paid: true
-        amount: "0.035000"
+        amount: '0.035000'
         currency: USDC
         method: POST
         path: /orders
         payment_method: x402
         wallet_transaction_id: f5533e85-16d8-4f58-ba22-86dba59c6a15
-        created_at: "2026-09-09T19:03:28.154Z"
-
-    Page:
+        created_at: '2026-09-09T19:03:28.154Z'
+    PaginationMeta:
       type: object
+      required:
+      - total
+      - limit
+      - has_more
+      - next_cursor
       properties:
-        count: { type: integer, example: 10 }
-        next: { type: integer, nullable: true, example: 3 }
-        prev: { type: integer, nullable: true, example: 1 }
-
-    CustomerPage:
-      allOf:
-        - $ref: "#/components/schemas/Page"
-        - type: object
-          properties:
-            results:
-              type: array
-              items: { $ref: "#/components/schemas/Customer" }
-
-    PaymentLinkPage:
-      allOf:
-        - $ref: "#/components/schemas/Page"
-        - type: object
-          properties:
-            results:
-              type: array
-              items: { $ref: "#/components/schemas/PaymentLink" }
-
-    InvoicePage:
-      allOf:
-        - $ref: "#/components/schemas/Page"
-        - type: object
-          properties:
-            results:
-              type: array
-              items: { $ref: "#/components/schemas/Invoice" }
-
-    SubscriptionPlanPage:
-      allOf:
-        - $ref: "#/components/schemas/Page"
-        - type: object
-          properties:
-            results:
-              type: array
-              items: { $ref: "#/components/schemas/SubscriptionPlan" }
-
-    SubscriptionPage:
-      allOf:
-        - $ref: "#/components/schemas/Page"
-        - type: object
-          properties:
-            results:
-              type: array
-              items: { $ref: "#/components/schemas/Subscription" }
-
-    SubscriptionInvoicePage:
-      allOf:
-        - $ref: "#/components/schemas/Page"
-        - type: object
-          properties:
-            results:
-              type: array
-              items: { $ref: "#/components/schemas/SubscriptionInvoice" }
+        total:
+          type: integer
+          minimum: 0
+          description: Total number of records matching the request.
+          example: 84
+        limit:
+          type: integer
+          minimum: 1
+          maximum: 100
+          description: Maximum number of records requested for this response.
+          example: 20
+        has_more:
+          type: boolean
+          description: Whether more records are available after this response.
+          example: true
+        next_cursor:
+          type:
+          - string
+          - 'null'
+          description: Cursor to pass in the next request. `null` when there are no more records.
+          example: cur_01HXYZ9999XXXXXX
+      example:
+        total: 84
+        limit: 20
+        has_more: true
+        next_cursor: cur_01HXYZ9999XXXXXX
+    ErrorResponse:
+      type: object
+      required:
+      - message
+      properties:
+        message:
+          type: string
+          description: Human-readable description of the error.
+    ValidationErrorDetail:
+      type: object
+      required:
+      - field
+      - message
+      properties:
+        field:
+          type: string
+          description: Field that failed validation.
+          example: email
+        message:
+          type: string
+          description: Description of the validation problem.
+          example: Enter a valid email address
+    ValidationErrorResponse:
+      type: object
+      required:
+      - message
+      - errors
+      properties:
+        message:
+          type: string
+          example: The request contains invalid fields
+        errors:
+          type: array
+          items:
+            $ref: '#/components/schemas/ValidationErrorDetail'
+    PingResponse:
+      type: object
+      required:
+      - message
+      - data
+      properties:
+        message:
+          type: string
+          example: API key verified successfully
+        data:
+          $ref: '#/components/schemas/Ping'
+    IssuedCustomerResponse:
+      type: object
+      required:
+      - message
+      - data
+      properties:
+        message:
+          type: string
+          example: Customer created successfully
+        data:
+          $ref: '#/components/schemas/IssuedCustomer'
+    CustomerResponse:
+      type: object
+      required:
+      - message
+      - data
+      properties:
+        message:
+          type: string
+          example: Customer retrieved successfully
+        data:
+          $ref: '#/components/schemas/Customer'
+    CustomerListResponse:
+      type: object
+      required:
+      - message
+      - data
+      - meta
+      properties:
+        message:
+          type: string
+          example: Customers retrieved successfully
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Customer'
+        meta:
+          $ref: '#/components/schemas/PaginationMeta'
+    WalletResponse:
+      type: object
+      required:
+      - message
+      - data
+      properties:
+        message:
+          type: string
+          example: Wallet created successfully
+        data:
+          $ref: '#/components/schemas/Wallet'
+    WalletListResponse:
+      type: object
+      required:
+      - message
+      - data
+      - meta
+      properties:
+        message:
+          type: string
+          example: Wallets retrieved successfully
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/WalletSummary'
+        meta:
+          $ref: '#/components/schemas/PaginationMeta'
+    WalletTransactionResponse:
+      type: object
+      required:
+      - message
+      - data
+      properties:
+        message:
+          type: string
+          example: Wallet transaction retrieved successfully
+        data:
+          $ref: '#/components/schemas/WalletTransaction'
+    WalletTransactionListResponse:
+      type: object
+      required:
+      - message
+      - data
+      - meta
+      properties:
+        message:
+          type: string
+          example: Wallet transactions retrieved successfully
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/WalletTransaction'
+        meta:
+          $ref: '#/components/schemas/PaginationMeta'
+    PaymentLinkResponse:
+      type: object
+      required:
+      - message
+      - data
+      properties:
+        message:
+          type: string
+          example: Payment link retrieved successfully
+        data:
+          $ref: '#/components/schemas/PaymentLink'
+    PaymentLinkListResponse:
+      type: object
+      required:
+      - message
+      - data
+      - meta
+      properties:
+        message:
+          type: string
+          example: Payment links retrieved successfully
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/PaymentLink'
+        meta:
+          $ref: '#/components/schemas/PaginationMeta'
+    InvoiceResponse:
+      type: object
+      required:
+      - message
+      - data
+      properties:
+        message:
+          type: string
+          example: Invoice retrieved successfully
+        data:
+          $ref: '#/components/schemas/Invoice'
+    InvoiceListResponse:
+      type: object
+      required:
+      - message
+      - data
+      - meta
+      properties:
+        message:
+          type: string
+          example: Invoices retrieved successfully
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Invoice'
+        meta:
+          $ref: '#/components/schemas/PaginationMeta'
+    SubscriptionPlanResponse:
+      type: object
+      required:
+      - message
+      - data
+      properties:
+        message:
+          type: string
+          example: Subscription plan retrieved successfully
+        data:
+          $ref: '#/components/schemas/SubscriptionPlan'
+    SubscriptionPlanListResponse:
+      type: object
+      required:
+      - message
+      - data
+      - meta
+      properties:
+        message:
+          type: string
+          example: Subscription plans retrieved successfully
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/SubscriptionPlan'
+        meta:
+          $ref: '#/components/schemas/PaginationMeta'
+    SubscriptionResponse:
+      type: object
+      required:
+      - message
+      - data
+      properties:
+        message:
+          type: string
+          example: Subscription retrieved successfully
+        data:
+          $ref: '#/components/schemas/Subscription'
+    SubscriptionListResponse:
+      type: object
+      required:
+      - message
+      - data
+      - meta
+      properties:
+        message:
+          type: string
+          example: Subscriptions retrieved successfully
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Subscription'
+        meta:
+          $ref: '#/components/schemas/PaginationMeta'
+    SubscriptionInvoiceListResponse:
+      type: object
+      required:
+      - message
+      - data
+      - meta
+      properties:
+        message:
+          type: string
+          example: Subscription invoices retrieved successfully
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/SubscriptionInvoice'
+        meta:
+          $ref: '#/components/schemas/PaginationMeta'
+    ProxyRequestResponse:
+      type: object
+      required:
+      - message
+      - data
+      properties:
+        message:
+          type: string
+          example: Paid request retrieved successfully
+        data:
+          $ref: '#/components/schemas/ProxyRequest'
+  responses:
+    BadRequest:
+      description: The request is invalid and could not be processed.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            message: The request is invalid.
+    Unauthorized:
+      description: Authentication failed because the API key is missing or invalid.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            message: Invalid or missing API key.
+    Forbidden:
+      description: The authenticated account is not allowed to perform this action.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            message: You do not have permission to perform this action.
+    NotFound:
+      description: The requested resource could not be found.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            message: The requested resource was not found.
+    Conflict:
+      description: The request conflicts with the current state of the resource.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            message: The request conflicts with the current resource state.
+    ValidationError:
+      description: One or more request fields are invalid.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ValidationErrorResponse'
+          example:
+            message: The request contains invalid fields.
+            errors:
+            - field: email
+              message: Enter a valid email address.
+    RateLimited:
+      description: Too many requests were sent in a short period.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            message: Too many requests. Please try again later.
+    InternalServerError:
+      description: An unexpected error occurred while processing the request.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            message: Something went wrong. Please try again later.
+    ServiceUnavailable:
+      description: The service is temporarily unavailable.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            message: Service temporarily unavailable. Please try again later.
