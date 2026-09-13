@@ -1,5 +1,81 @@
 ---
 title: Common integration errors
+subtitle: Avoid common mistakes when building with the Mitu API.
 ---
 
-<Note>This page is being written. See the platform guide for the source material.</Note>
+Most integration problems come from a small number of mistakes around environments, retries, request verification and webhook handling. Understanding these early can prevent duplicate operations, failed requests and confusing differences between Sandbox and Production.
+
+This page covers the problems worth checking first when an integration is not behaving as expected. Follow the linked reference pages when you need the complete behaviour or implementation details.
+
+## Mixing Sandbox and Production
+
+Sandbox and Production are separate environments with their own credentials and resources. A customer, wallet or payment created in Sandbox does not exist in Production, so using credentials or resource identifiers from one environment with the other can lead to authentication failures or resources that appear to be missing.
+
+Make sure your API key and base URL belong to the same environment.
+
+| Environment | Base URL |
+| --- | --- |
+| Sandbox | `https://sandbox-api.mitu.ai` |
+| Production | `https://api.mitu.ai` |
+
+Keep the base URL and API key together in your environment configuration rather than hard-coding either value throughout your application. See [Authentication](/api-reference/authentication) for how authentication works across both environments.
+
+## Using the wrong credential
+
+Your merchant API key authenticates requests from your backend to the Mitu API. Customer keys, request signing secrets and webhook secrets have different purposes and cannot be substituted for it.
+
+For example, an `mcpk_...` customer key identifies a customer connecting through MCP, while an `mps_...` signing secret is used by your backend to verify requests sent by Mitu. A `whsec_...` secret is used specifically to verify webhook deliveries.
+
+See [Keys and secrets](/platform/security/keys-and-secrets) for the credentials used across an integration and where each one belongs.
+
+## Retrying an operation with a new idempotency key
+
+If a request times out, your application may not know whether Mitu completed the operation. Retrying it with a new `Idempotency-Key` makes the retry appear to be a new operation, which can result in duplicate resources or actions.
+
+Create the idempotency key before the first attempt and reuse the same value whenever you retry that operation. The request should also remain consistent across those attempts. See [Idempotency](/api-reference/idempotency) for the complete retry pattern.
+
+## Trusting a request before verifying it
+
+Requests sent by Mitu to your API can contain information about the customer, payment and request being processed. Do not trust this information simply because the expected headers are present, since a caller that can reach your endpoint could construct those headers itself.
+
+Verify the request using the signing secret provided by Mitu before processing it or trusting its Mitu-specific headers. Customer authentication and request verification are separate concerns, so an authenticated customer does not remove the need to verify that the request itself came through Mitu.
+
+See [Request verification](/platform/security/request-verification) for the verification process and implementation examples.
+
+## Processing the same request more than once
+
+Requests and webhook deliveries can sometimes be received more than once. Your backend should be able to recognise a request it has already processed so a retry does not create another order, repeat fulfilment or apply the same state change twice.
+
+For requests Mitu forwards to your API, use the Mitu request identifier to associate the request with the operation created in your system. For webhook deliveries, use the event identifier to recognise events you have already processed. See [Request verification](/platform/security/request-verification) and [Webhooks](/platform/webhooks/overview) for the appropriate handling patterns.
+
+## Using floating-point numbers for money
+
+Monetary amounts should be handled using decimal-safe types rather than binary floating-point arithmetic. Converting a decimal amount into a floating-point number can introduce rounding differences that become more significant when values are compared, calculated or reconciled.
+
+Keep monetary values in the representation returned by the API and use an appropriate decimal or fixed-precision type when performing calculations. Avoid relying on string equality when comparing equivalent monetary values with different decimal representations.
+
+## Polling when an event is available
+
+Payments, wallets, invoices and subscriptions can change state after the request that created them has completed. Repeatedly polling the API for these changes adds unnecessary requests and can make it harder to react promptly to important state transitions.
+
+Use webhooks for asynchronous state changes and use API retrieval endpoints when you need to fetch or confirm the current state of a resource. Your webhook handler should verify each delivery and process repeated events safely. See [Webhooks](/platform/webhooks/overview) and [Events](/platform/webhooks/events) for the events available to your integration.
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="Authentication" icon="regular right-to-bracket" href="/api-reference/authentication">
+    Authenticate API requests in Sandbox and Production.
+  </Card>
+
+  <Card title="Idempotency" icon="regular arrows-rotate" href="/api-reference/idempotency">
+    Retry API operations without performing them twice.
+  </Card>
+
+  <Card title="Request verification" icon="regular shield-check" href="/platform/security/request-verification">
+    Verify requests Mitu sends to your backend.
+  </Card>
+
+  <Card title="Webhooks" icon="regular webhook" href="/platform/webhooks/overview">
+    Receive and process asynchronous events safely.
+  </Card>
+</CardGroup>

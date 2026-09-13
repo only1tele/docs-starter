@@ -8,21 +8,1106 @@ info:
 servers:
   - url: https://api.mitu.ai
     description: Production
+  - url: https://sandbox-api.mitu.ai
+    description: Sandbox
 security:
   - ApiKey: []
+
+tags:
+  - name: Health
+  - name: Customers
+  - name: Agent Wallets
+  - name: Payment links
+  - name: Invoices
+  - name: Subscription plans
+  - name: Subscriptions
+  - name: Agent payments
+
 paths:
   /v1/ping:
     get:
       operationId: ping
-      summary: Check a key
+      summary: Verify an API key and show what it resolves to
       description: Confirms a key is valid, with no side effects.
       tags: [Health]
       responses:
         "200":
           description: The key is valid.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Ping" }
+
+  /v1/customers:
+    post:
+      operationId: createCustomer
+      summary: Create a customer and issue their key
+      description: |
+        Safe to retry. The same `client_reference_id` always resolves to the
+        same customer, so a customer who later signs in through your own OAuth
+        is recognised rather than duplicated.
+
+        The customer key is returned once. Only its hash is stored.
+      tags: [Customers]
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateCustomer" }
+      responses:
+        "201":
+          description: The customer, with their key.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/IssuedCustomer" }
+    get:
+      operationId: listCustomers
+      summary: List customers
+      tags: [Customers]
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/Limit"
+        - name: search
+          in: query
+          description: Match name, email or phone.
+          schema: { type: string, maxLength: 120 }
+      responses:
+        "200":
+          description: A page of customers.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CustomerPage" }
+
+  /v1/customers/{id}:
+    get:
+      operationId: getCustomer
+      summary: Get a customer
+      tags: [Customers]
+      parameters:
+        - $ref: "#/components/parameters/PathId"
+      responses:
+        "200":
+          description: The customer.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Customer" }
+
+  /v1/customers/{id}/wallets:
+    post:
+      operationId: createCustomerWallet
+      summary: Create a named wallet for a customer
+      description: |
+        For a second wallet onwards. The first wallet needs no call: it appears
+        the moment the customer's agent asks for a balance.
+
+        A wallet created without `limits` inherits the limits already on the
+        wallet this customer started with.
+      tags: [Agent Wallets]
+      parameters:
+        - $ref: "#/components/parameters/PathId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateWallet" }
+      responses:
+        "201":
+          description: The wallet, with its funding addresses.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Wallet" }
+        "503":
+          description: The wallet service is unavailable.
+    get:
+      operationId: listCustomerWallets
+      summary: Every named wallet this customer holds
+      tags: [Agent Wallets]
+      parameters:
+        - $ref: "#/components/parameters/PathId"
+      responses:
+        "200":
+          description: The customer's wallets and their limits.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/WalletSummary" }
+
+  /v1/payment-links:
+    post:
+      operationId: createPaymentLink
+      summary: Create a payment link
+      tags: [Payment links]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreatePaymentLink" }
+      responses:
+        "201":
+          description: The payment link, including `checkoutUrl`.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PaymentLink" }
+    get:
+      operationId: listPaymentLinks
+      summary: List payment links
+      tags: [Payment links]
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/Limit"
+        - name: type
+          in: query
+          schema: { $ref: "#/components/schemas/PaymentLinkType" }
+        - name: status
+          in: query
+          schema: { $ref: "#/components/schemas/PaymentLinkStatus" }
+        - name: reference
+          in: query
+          schema: { type: string }
+        - name: source
+          in: query
+          description: >-
+            Omitted, the list leaves out links raised for a commerce sale. Pass
+            `commerce` to see only those.
+          schema: { type: string, enum: [dashboard, api, commerce] }
+      responses:
+        "200":
+          description: A page of payment links.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PaymentLinkPage" }
+
+  /v1/payment-links/{id}:
+    get:
+      operationId: getPaymentLink
+      summary: Get a payment link
+      tags: [Payment links]
+      parameters:
+        - $ref: "#/components/parameters/PathId"
+      responses:
+        "200":
+          description: The payment link.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PaymentLink" }
+    patch:
+      operationId: updatePaymentLink
+      summary: Update a payment link
+      tags: [Payment links]
+      parameters:
+        - $ref: "#/components/parameters/PathId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/UpdatePaymentLink" }
+      responses:
+        "200":
+          description: The updated payment link.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PaymentLink" }
+        "409":
+          description: The link was raised for a sale and cannot be changed here.
+
+  /v1/payment-links/{id}/cancel:
+    delete:
+      operationId: cancelPaymentLink
+      summary: Cancel a payment link
+      description: Only a `pending`, `partial` or `active` link can be cancelled.
+      tags: [Payment links]
+      parameters:
+        - $ref: "#/components/parameters/PathId"
+      responses:
+        "200":
+          description: The cancelled payment link.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PaymentLink" }
+        "409":
+          description: The link was raised for a sale, or is not cancellable.
+
+  /v1/invoices:
+    post:
+      operationId: createInvoice
+      summary: Create an invoice
+      tags: [Invoices]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateInvoice" }
+      responses:
+        "201":
+          description: The invoice, including `checkoutUrl`.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Invoice" }
+    get:
+      operationId: listInvoices
+      summary: List invoices
+      tags: [Invoices]
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/Limit"
+        - name: status
+          in: query
+          schema: { $ref: "#/components/schemas/InvoiceStatus" }
+        - name: customerId
+          in: query
+          description: Only invoices for this customer.
+          schema: { type: string }
+      responses:
+        "200":
+          description: A page of invoices.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/InvoicePage" }
+
+  /v1/invoices/{id}:
+    get:
+      operationId: getInvoice
+      summary: Get an invoice
+      tags: [Invoices]
+      parameters:
+        - $ref: "#/components/parameters/PathId"
+      responses:
+        "200":
+          description: The invoice.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Invoice" }
+    patch:
+      operationId: updateInvoice
+      summary: Update an invoice
+      tags: [Invoices]
+      parameters:
+        - $ref: "#/components/parameters/PathId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/UpdateInvoice" }
+      responses:
+        "200":
+          description: The updated invoice.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Invoice" }
+
+  /v1/invoices/{id}/send:
+    post:
+      operationId: sendInvoice
+      summary: Send an invoice to its recipient
+      tags: [Invoices]
+      parameters:
+        - $ref: "#/components/parameters/PathId"
+      responses:
+        "200":
+          description: The sent invoice.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Invoice" }
+
+  /v1/invoices/{id}/cancel:
+    delete:
+      operationId: cancelInvoice
+      summary: Cancel an invoice
+      tags: [Invoices]
+      parameters:
+        - $ref: "#/components/parameters/PathId"
+      responses:
+        "200":
+          description: The cancelled invoice.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Invoice" }
+
+  /v1/subscription-plans:
+    post:
+      operationId: createSubscriptionPlan
+      summary: Create a subscription plan
+      tags: [Subscription plans]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateSubscriptionPlan" }
+      responses:
+        "201":
+          description: The subscription plan.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SubscriptionPlan" }
+    get:
+      operationId: listSubscriptionPlans
+      summary: List subscription plans
+      tags: [Subscription plans]
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/Limit"
+        - name: status
+          in: query
+          schema: { type: string, enum: [active, paused, archived] }
+      responses:
+        "200":
+          description: A page of subscription plans.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SubscriptionPlanPage" }
+
+  /v1/subscription-plans/{id}:
+    get:
+      operationId: getSubscriptionPlan
+      summary: Get a subscription plan
+      tags: [Subscription plans]
+      parameters:
+        - $ref: "#/components/parameters/PathId"
+      responses:
+        "200":
+          description: The subscription plan.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SubscriptionPlan" }
+
+  /v1/subscriptions:
+    post:
+      operationId: createSubscription
+      summary: Create a subscription
+      tags: [Subscriptions]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateSubscription" }
+      responses:
+        "201":
+          description: The subscription.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Subscription" }
+    get:
+      operationId: listSubscriptions
+      summary: List subscriptions
+      tags: [Subscriptions]
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/Limit"
+        - name: status
+          in: query
+          schema: { $ref: "#/components/schemas/SubscriptionStatus" }
+        - name: subscriptionPlanId
+          in: query
+          schema: { type: string }
+      responses:
+        "200":
+          description: A page of subscriptions.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SubscriptionPage" }
+
+  /v1/subscriptions/{id}:
+    get:
+      operationId: getSubscription
+      summary: Get a subscription
+      tags: [Subscriptions]
+      parameters:
+        - $ref: "#/components/parameters/PathId"
+      responses:
+        "200":
+          description: The subscription.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Subscription" }
+
+  /v1/subscriptions/{id}/cancel:
+    post:
+      operationId: cancelSubscription
+      summary: Cancel a subscription
+      tags: [Subscriptions]
+      parameters:
+        - $ref: "#/components/parameters/PathId"
+      responses:
+        "200":
+          description: The cancelled subscription.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Subscription" }
+
+  /v1/subscriptions/{id}/invoices:
+    get:
+      operationId: listSubscriptionInvoices
+      summary: List invoices for a subscription
+      tags: [Subscriptions]
+      parameters:
+        - $ref: "#/components/parameters/PathId"
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200":
+          description: A page of subscription invoices.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SubscriptionInvoicePage" }
+
+  /v1/proxy-requests/{id}:
+    get:
+      operationId: getProxyRequest
+      summary: Confirm a proxied request was paid
+      description: |
+        Look up a paid request by the `x-mitu-request-id` your API received, to
+        confirm independently that it was paid before doing work for it.
+      tags: [Agent payments]
+      parameters:
+        - $ref: "#/components/parameters/PathId"
+      responses:
+        "200":
+          description: The proxied request.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ProxyRequest" }
+
 components:
   securitySchemes:
     ApiKey:
       type: apiKey
       in: header
       name: x-api-key
+      description: Account API key, `sk_live_...`
+
+  parameters:
+    PathId:
+      name: id
+      in: path
+      required: true
+      schema: { type: string }
+    Page:
+      name: page
+      in: query
+      schema: { type: integer, minimum: 1, default: 1 }
+    Limit:
+      name: limit
+      in: query
+      schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+    IdempotencyKey:
+      name: idempotency-key
+      in: header
+      description: Retry safely. A repeated key replays the first result.
+      schema: { type: string }
+
+  schemas:
+    PaymentLinkType:
+      type: string
+      enum: [charge, subscription, session, per_request]
+    PaymentLinkStatus:
+      type: string
+      enum: [pending, partial, active, settling, paid, settled, expired, cancelled]
+    PaymentMethod:
+      type: string
+      enum: [x402, mpp_crypto, mpp_spt]
+    InvoiceStatus:
+      type: string
+      enum: [draft, sent, viewed, settling, paid, overdue, cancelled]
+    BillingInterval:
+      type: string
+      enum: [day, week, month, year]
+    SubscriptionStatus:
+      type: string
+      enum: [active, past_due, paused, cancelled, expired]
+
+    CreateCustomer:
+      type: object
+      required: [client_reference_id]
+      properties:
+        client_reference_id:
+          type: string
+          maxLength: 64
+          example: goro_user_8841
+          description: Your own id for this person.
+        first_name: { type: string, maxLength: 60, example: Tele }
+        last_name: { type: string, maxLength: 60, example: Falola }
+        email: { type: string, format: email, maxLength: 180, example: tele@mitu.ai }
+        phone: { type: string, maxLength: 32, example: "+2348012345678" }
+
+      example:
+        client_reference_id: goro_user_8841
+        first_name: Tele
+        last_name: Falola
+        email: tele@mitu.ai
+        phone: "+2348012345678"
+    IssuedCustomer:
+      type: object
+      properties:
+        id: { type: string }
+        client_reference_id: { type: string }
+        first_name: { type: string, nullable: true }
+        last_name: { type: string, nullable: true }
+        email: { type: string, nullable: true }
+        phone: { type: string, nullable: true }
+        key:
+          type: string
+          description: The customer key, returned once. Only its hash is stored.
+          example: mcpk_...
+        mcp_url: { type: string }
+        created_at: { type: string, format: date-time }
+      example:
+        id: cus_0t9549fps3xd
+        client_reference_id: goro_user_8841
+        first_name: Tele
+        last_name: Falola
+        email: tele@mitu.ai
+        phone: "+2348012345678"
+        key: mcpk_live_7f3a9c2e5b14d806a1f2
+        mcp_url: https://mcp.mitu.ai/goro
+        created_at: "2026-09-09T18:41:50.204Z"
+
+    WalletLimits:
+      type: object
+      description: >-
+        What an agent may spend from this wallet, in USD. Zero is an explicit
+        "no limit"; an omitted field keeps whatever the wallet inherited.
+      properties:
+        per_payment: { type: number, minimum: 0, example: 25 }
+        monthly: { type: number, minimum: 0, example: 200 }
+        approve_above: { type: number, minimum: 0, example: 50 }
+
+    CreateWallet:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+          maxLength: 80
+          example: Travel
+          description: >-
+            What the customer calls this pot. The agent names it when paying,
+            so it should read the way the customer would say it.
+        limits: { $ref: "#/components/schemas/WalletLimits" }
+
+      example:
+        name: Travel
+        limits:
+          per_payment: 25
+          monthly: 200
+          approve_above: 50
+    WalletSummary:
+      type: object
+      properties:
+        id: { type: string }
+        customer_id: { type: string }
+        name: { type: string }
+        currency: { type: string, example: USDC }
+        limits:
+          allOf:
+            - $ref: "#/components/schemas/WalletLimits"
+            - type: object
+              properties:
+                currency: { type: string, example: USD }
+        created_at: { type: string, format: date-time }
+
+    Wallet:
+      allOf:
+        - $ref: "#/components/schemas/WalletSummary"
+        - type: object
+          properties:
+            addresses:
+              type: array
+              items:
+                type: object
+                properties:
+                  network: { type: string, example: base }
+                  address: { type: string }
+      example:
+        id: wal_65286515b43d4e3eba93
+        customer_id: cus_0t9549fps3xd
+        name: Travel
+        currency: USDC
+        limits:
+          per_payment: 25
+          monthly: 200
+          approve_above: 50
+          currency: USD
+        addresses:
+          - network: base
+            address: "0xa90818aeC6b04b6E48c9bD7A5C0d8B3F17e2419d"
+          - network: tempo
+            address: "0xa90818aeC6b04b6E48c9bD7A5C0d8B3F17e2419d"
+          - network: solana
+            address: 7U6P9CrM7CqkYyNbBLpKfoJcWn4sVz1TgDxMhRa2EuQK
+        created_at: "2026-09-11T00:32:58.292Z"
+
+    CreatePaymentLink:
+      type: object
+      properties:
+        type:
+          allOf: [{ $ref: "#/components/schemas/PaymentLinkType" }]
+          default: charge
+        amount:
+          type: number
+          description: >-
+            Required for `charge` and `per_request`. `session` uses
+            `sessionMaxDeposit`; `subscription` derives it from the plan.
+        currency:
+          type: string
+          example: NGN
+          description: Required except for `subscription`, which takes it from the plan.
+        planId: { type: string, description: subscription only — a single plan id. }
+        planIds:
+          type: array
+          items: { type: string }
+          description: subscription only — offer several plans for the payer to pick.
+        allowCustomerChoice:
+          type: boolean
+          default: false
+          description: subscription only — let the payer choose among `planIds`.
+        description: { type: string, maxLength: 2000 }
+        reference: { type: string, maxLength: 255, description: Your own order id. }
+        expiresAt: { type: string, format: date-time }
+        endpointPattern: { type: string, maxLength: 500, description: per_request only. }
+        sessionMaxDeposit: { type: number, description: session only. }
+        sessionExpiresAt: { type: string, format: date-time, description: session only. }
+        paymentMethods:
+          type: array
+          items: { $ref: "#/components/schemas/PaymentMethod" }
+        metadata:
+          type: object
+          additionalProperties: { type: string }
+          description: Free-form metadata, returned with the payment.
+
+      example:
+        type: charge
+        amount: 25
+        currency: USD
+        description: Two large pizzas
+        reference: ORDER-8841
+        paymentMethods: [x402, mpp_crypto]
+        metadata:
+          order_id: "8841"
+    UpdatePaymentLink:
+      type: object
+      properties:
+        expiresAt: { type: string, format: date-time }
+        description: { type: string, maxLength: 2000 }
+        reference: { type: string, maxLength: 255 }
+        metadata:
+          type: object
+          additionalProperties: { type: string }
+
+      example:
+        description: Two large pizzas and a side
+        reference: ORDER-8841
+        expiresAt: "2026-09-30T23:59:59.000Z"
+    InvoiceLineItem:
+      type: object
+      required: [name, quantity, amount]
+      properties:
+        name: { type: string, maxLength: 255 }
+        description: { type: string, maxLength: 500 }
+        quantity: { type: integer, minimum: 1 }
+        amount: { type: number }
+
+      example:
+        name: Integration support
+        description: 10 hours
+        quantity: 10
+        amount: 150
+    CreateInvoice:
+      type: object
+      required: [customerId, lineItems, currency]
+      properties:
+        customerId: { type: string, description: Who the invoice is addressed to. }
+        invoiceNumber: { type: string, maxLength: 50 }
+        description: { type: string, maxLength: 2000 }
+        lineItems:
+          type: array
+          minItems: 1
+          items: { $ref: "#/components/schemas/InvoiceLineItem" }
+        currency: { type: string, example: USD }
+        taxAmount: { type: number, minimum: 0, default: 0 }
+        discountAmount: { type: number, minimum: 0, default: 0 }
+        dueAt: { type: string, format: date-time }
+
+      example:
+        customerId: cus_0t9549fps3xd
+        invoiceNumber: INV-2026-0041
+        description: September retainer
+        currency: USD
+        lineItems:
+          - name: Integration support
+            description: 10 hours
+            quantity: 10
+            amount: 150
+        dueAt: "2026-09-30T23:59:59.000Z"
+    UpdateInvoice:
+      type: object
+      properties:
+        description: { type: string, maxLength: 2000 }
+        lineItems:
+          type: array
+          minItems: 1
+          items: { $ref: "#/components/schemas/InvoiceLineItem" }
+        taxAmount: { type: number, minimum: 0 }
+        discountAmount: { type: number, minimum: 0 }
+        dueAt: { type: string, format: date-time }
+
+      example:
+        description: September retainer (revised)
+        lineItems:
+          - name: Integration support
+            quantity: 12
+            amount: 150
+        dueAt: "2026-10-07T23:59:59.000Z"
+    CreateSubscriptionPlan:
+      type: object
+      required: [name, amount, currency, billingInterval]
+      properties:
+        name: { type: string, maxLength: 255 }
+        description: { type: string, maxLength: 2000 }
+        amount: { type: number }
+        currency: { type: string, example: USD }
+        billingInterval: { $ref: "#/components/schemas/BillingInterval" }
+        features:
+          type: array
+          items: { type: string }
+
+      example:
+        name: Pro
+        description: For teams shipping agents in production
+        amount: 49
+        currency: USD
+        billingInterval: month
+        features: ["Unlimited agents", "Priority support"]
+    CreateSubscription:
+      type: object
+      required: [subscriptionPlanId, paymentMethod]
+      properties:
+        subscriptionPlanId: { type: string }
+        paymentMethod:
+          type: string
+          enum: [mpp_crypto, mpp_spt]
+          description: Recurring charges settle over MPP.
+        subscriberId: { type: string, description: Agent or user id that subscribed. }
+        subscriberType:
+          type: string
+          enum: [agent, user]
+          default: agent
+
+      example:
+        subscriptionPlanId: plan_3j8w2q7xr1md
+        paymentMethod: mpp_crypto
+        subscriberId: agt_5m1p8w3ldx7b
+        subscriberType: agent
+    Ping:
+      type: object
+      properties:
+        ok: { type: boolean }
+        account_id: { type: string }
+        api_key_id: { type: string }
+        environment: { type: string }
+        scopes:
+          type: array
+          items: { type: string }
+      example:
+        ok: true
+        account_id: 8f14e45f-ceea-467a-9f0b-3c2d1a7b4e90
+        api_key_id: ak_7d2f9c1b4a83
+        environment: live
+        scopes: []
+
+    Customer:
+      type: object
+      properties:
+        id: { type: string }
+        externalRef:
+          type: string
+          nullable: true
+          description: Your own id for this person, sent as `client_reference_id`.
+        name: { type: string, nullable: true }
+        firstName: { type: string, nullable: true }
+        lastName: { type: string, nullable: true }
+        email: { type: string, nullable: true }
+        phone: { type: string, nullable: true }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+      example:
+        id: cus_0t9549fps3xd
+        externalRef: goro_user_8841
+        name: Tele Falola
+        firstName: Tele
+        lastName: Falola
+        email: tele@mitu.ai
+        phone: "+2348012345678"
+        createdAt: "2026-09-09T18:41:50.204Z"
+        updatedAt: "2026-09-09T18:41:50.204Z"
+
+    PaymentLink:
+      type: object
+      properties:
+        id: { type: string }
+        type: { $ref: "#/components/schemas/PaymentLinkType" }
+        status: { $ref: "#/components/schemas/PaymentLinkStatus" }
+        amount: { type: string, description: Decimal, sent as a string. }
+        amountPaid: { type: string }
+        currency: { type: string }
+        description: { type: string, nullable: true }
+        reference: { type: string, nullable: true }
+        endpointPattern: { type: string, nullable: true }
+        planIds:
+          type: array
+          nullable: true
+          items: { type: string }
+        allowCustomerChoice: { type: boolean }
+        checkoutUrl:
+          type: string
+          description: The page a person opens to pay.
+        expiresAt: { type: string, format: date-time, nullable: true }
+        paidAt: { type: string, format: date-time, nullable: true }
+        settledAt: { type: string, format: date-time, nullable: true }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+      example:
+        id: pay_n8d7piu1yc6h
+        type: charge
+        status: pending
+        amount: "25.00"
+        amountPaid: "0.00"
+        currency: USD
+        description: Two large pizzas
+        reference: ORDER-8841
+        endpointPattern: null
+        planIds: null
+        allowCustomerChoice: false
+        checkoutUrl: https://mitu.ai/pay/pay_n8d7piu1yc6h
+        expiresAt: null
+        paidAt: null
+        settledAt: null
+        createdAt: "2026-09-09T14:05:11.402Z"
+        updatedAt: "2026-09-09T14:05:11.402Z"
+
+    Invoice:
+      type: object
+      properties:
+        id: { type: string }
+        status: { $ref: "#/components/schemas/InvoiceStatus" }
+        customerId: { type: string, nullable: true }
+        invoiceNumber: { type: string, nullable: true }
+        description: { type: string, nullable: true }
+        lineItems:
+          type: array
+          items: { $ref: "#/components/schemas/InvoiceLineItem" }
+        amount: { type: string }
+        currency: { type: string }
+        taxAmount: { type: string }
+        discountAmount: { type: string }
+        checkoutUrl: { type: string }
+        dueAt: { type: string, format: date-time, nullable: true }
+        sentAt: { type: string, format: date-time, nullable: true }
+        viewedAt: { type: string, format: date-time, nullable: true }
+        paidAt: { type: string, format: date-time, nullable: true }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+      example:
+        id: inv_4k2m9x7ptw3c
+        status: draft
+        customerId: cus_0t9549fps3xd
+        invoiceNumber: INV-2026-0041
+        description: September retainer
+        lineItems:
+          - name: Integration support
+            description: 10 hours
+            quantity: 10
+            amount: 150
+        amount: "1500.00"
+        currency: USD
+        taxAmount: "0.00"
+        discountAmount: "0.00"
+        checkoutUrl: https://mitu.ai/invoice/inv_4k2m9x7ptw3c
+        dueAt: "2026-09-30T23:59:59.000Z"
+        sentAt: null
+        viewedAt: null
+        paidAt: null
+        createdAt: "2026-09-09T10:12:04.881Z"
+        updatedAt: "2026-09-09T10:12:04.881Z"
+
+    SubscriptionPlan:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string }
+        description: { type: string, nullable: true }
+        amount: { type: string }
+        currency: { type: string }
+        billingInterval: { $ref: "#/components/schemas/BillingInterval" }
+        features:
+          type: array
+          items: { type: string }
+        status: { type: string, enum: [active, paused, archived] }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+      example:
+        id: plan_3j8w2q7xr1md
+        name: Pro
+        description: For teams shipping agents in production
+        amount: "49.00"
+        currency: USD
+        billingInterval: month
+        features: ["Unlimited agents", "Priority support"]
+        status: active
+        createdAt: "2026-09-01T09:00:00.000Z"
+        updatedAt: "2026-09-01T09:00:00.000Z"
+
+    Subscription:
+      type: object
+      properties:
+        id: { type: string }
+        subscriptionPlanId: { type: string }
+        status: { $ref: "#/components/schemas/SubscriptionStatus" }
+        subscriberId: { type: string, nullable: true }
+        subscriberType: { type: string, enum: [agent, user] }
+        paymentMethod: { type: string, enum: [mpp_crypto, mpp_spt] }
+        currentPeriodStart: { type: string, format: date-time }
+        currentPeriodEnd: { type: string, format: date-time }
+        nextBillingAt: { type: string, format: date-time, nullable: true }
+        startedAt: { type: string, format: date-time, nullable: true }
+        cancelledAt: { type: string, format: date-time, nullable: true }
+        endedAt: { type: string, format: date-time, nullable: true }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+      example:
+        id: sub_9c4t6z2vn8kq
+        subscriptionPlanId: plan_3j8w2q7xr1md
+        status: active
+        subscriberId: agt_5m1p8w3ldx7b
+        subscriberType: agent
+        paymentMethod: mpp_crypto
+        currentPeriodStart: "2026-09-01T00:00:00.000Z"
+        currentPeriodEnd: "2026-10-01T00:00:00.000Z"
+        nextBillingAt: "2026-10-01T00:00:00.000Z"
+        startedAt: "2026-09-01T00:00:00.000Z"
+        cancelledAt: null
+        endedAt: null
+        createdAt: "2026-09-01T00:00:00.000Z"
+        updatedAt: "2026-09-01T00:00:00.000Z"
+
+    SubscriptionInvoice:
+      type: object
+      properties:
+        id: { type: string }
+        subscriptionId: { type: string }
+        status: { type: string, enum: [pending, paid, failed, refunded, void] }
+        amount: { type: string }
+        currency: { type: string }
+        paymentMethod: { type: string, enum: [mpp_crypto, mpp_spt] }
+        periodStart: { type: string, format: date-time }
+        periodEnd: { type: string, format: date-time }
+        attempts: { type: integer }
+        dueAt: { type: string, format: date-time, nullable: true }
+        paidAt: { type: string, format: date-time, nullable: true }
+        createdAt: { type: string, format: date-time }
+      example:
+        id: subinv_2h7k4d9qz3xw
+        subscriptionId: sub_9c4t6z2vn8kq
+        status: paid
+        amount: "49.00"
+        currency: USD
+        paymentMethod: mpp_crypto
+        periodStart: "2026-09-01T00:00:00.000Z"
+        periodEnd: "2026-10-01T00:00:00.000Z"
+        attempts: 1
+        dueAt: "2026-09-01T00:00:00.000Z"
+        paidAt: "2026-09-01T00:04:12.660Z"
+        createdAt: "2026-09-01T00:00:00.000Z"
+
+    ProxyRequest:
+      type: object
+      description: >-
+        An amount is only recorded once money was actually taken, so `paid` is
+        the answer to "was this request paid".
+      properties:
+        request_id: { type: string }
+        service_id: { type: string }
+        paid: { type: boolean }
+        amount: { type: string, nullable: true }
+        currency: { type: string, nullable: true }
+        method: { type: string, nullable: true }
+        path: { type: string, nullable: true }
+        payment_method: { type: string, nullable: true }
+        wallet_transaction_id:
+          type: string
+          nullable: true
+          description: The settlement you can check on-chain yourself.
+        created_at: { type: string, format: date-time }
+      example:
+        request_id: req_abc123
+        service_id: svc_dhydwg80dzb4vy6xjl2m
+        paid: true
+        amount: "0.035000"
+        currency: USDC
+        method: POST
+        path: /orders
+        payment_method: x402
+        wallet_transaction_id: f5533e85-16d8-4f58-ba22-86dba59c6a15
+        created_at: "2026-09-09T19:03:28.154Z"
+
+    Page:
+      type: object
+      properties:
+        count: { type: integer, example: 10 }
+        next: { type: integer, nullable: true, example: 3 }
+        prev: { type: integer, nullable: true, example: 1 }
+
+    CustomerPage:
+      allOf:
+        - $ref: "#/components/schemas/Page"
+        - type: object
+          properties:
+            results:
+              type: array
+              items: { $ref: "#/components/schemas/Customer" }
+
+    PaymentLinkPage:
+      allOf:
+        - $ref: "#/components/schemas/Page"
+        - type: object
+          properties:
+            results:
+              type: array
+              items: { $ref: "#/components/schemas/PaymentLink" }
+
+    InvoicePage:
+      allOf:
+        - $ref: "#/components/schemas/Page"
+        - type: object
+          properties:
+            results:
+              type: array
+              items: { $ref: "#/components/schemas/Invoice" }
+
+    SubscriptionPlanPage:
+      allOf:
+        - $ref: "#/components/schemas/Page"
+        - type: object
+          properties:
+            results:
+              type: array
+              items: { $ref: "#/components/schemas/SubscriptionPlan" }
+
+    SubscriptionPage:
+      allOf:
+        - $ref: "#/components/schemas/Page"
+        - type: object
+          properties:
+            results:
+              type: array
+              items: { $ref: "#/components/schemas/Subscription" }
+
+    SubscriptionInvoicePage:
+      allOf:
+        - $ref: "#/components/schemas/Page"
+        - type: object
+          properties:
+            results:
+              type: array
+              items: { $ref: "#/components/schemas/SubscriptionInvoice" }

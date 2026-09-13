@@ -154,13 +154,14 @@ navigation:
         path: docs/pages/auth.mdx
       - page: Idempotency
         path: docs/pages/idempotency.mdx
-      - page: Endpoints
-        path: docs/pages/reference.mdx
       - page: Common integration errors
         path: docs/pages/mistakes.mdx
       - api: API Reference
+        skip-slug: true
 
 redirects:
+  - source: "/api-reference/endpoints"
+    destination: "/api-reference/authentication"
   - source: "/platform/customers/customers-through-o-auth"
     destination: "/platform/customers/oauth"
   - source: "/guides/integration-guides/authenticate-with-your-identity-provider"

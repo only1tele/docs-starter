@@ -1,5 +1,167 @@
 ---
 title: Endpoints
+subtitle: The shape of the Mitu API, and every endpoint grouped by resource.
 ---
 
-<Note>This page is being written. See the platform guide for the source material.</Note>
+The Mitu API is a JSON HTTP API. Every path is versioned, every request is authenticated with your merchant API key, and every write can be made retriable with an idempotency key.
+
+| Environment | Base URL |
+| --- | --- |
+| Production | `https://api.mitu.ai/v1` |
+| Sandbox | `https://sandbox-api.mitu.ai/v1` |
+
+The two environments share every path listed below. Only the host and the credential differ, and they change together — a Sandbox key does not authenticate against production.
+
+Send `Content-Type: application/json` on requests with a body, and `x-api-key` on all of them. [Authentication](/api-reference/authentication) covers keys and Sandbox; [Idempotency](/api-reference/idempotency) covers safe retries.
+
+## Conventions
+
+### Identifiers
+
+Resources are returned with a prefixed string id — `cus_...` for a customer, and the equivalent for each other resource. Treat ids as opaque strings: match on them, but do not parse them or assume a length.
+
+Alongside the Mitu id, most resources carry your own reference. `client_reference_id` is yours to set and yours to look up by, and it is how a Mitu record stays connected to the row in your database.
+
+### Amounts
+
+Amounts are sent as numbers and returned as decimal strings.
+
+```json title="Request"
+{ "amount": 25, "currency": "USDC" }
+```
+
+```json title="Response"
+{ "amount": "25.00", "amountPaid": "0.00", "currency": "USDC" }
+```
+
+The asymmetry is deliberate: a decimal string survives the round trip through JSON without the rounding a binary float would introduce. Parse them with a decimal type rather than a native float, and never compare two amounts by string equality — `"25.00"` and `"25.0"` are the same money.
+
+### Pagination
+
+List endpoints take `page` and `limit` as query parameters.
+
+| Parameter | Type | Default | Notes |
+| --- | --- | --- | --- |
+| `page` | `integer` | `1` | One-based. |
+| `limit` | `integer` | `20` | Maximum `100`. |
+
+They return the page of records under `results`, with the cursors alongside.
+
+```json title="Response"
+{
+  "count": 10,
+  "next": 3,
+  "prev": 1,
+  "results": []
+}
+```
+
+`next` is `null` on the last page, which is the condition to stop on. Walking until `results` comes back empty costs an extra request every time.
+
+## Health
+
+| Endpoint | Description |
+| --- | --- |
+| [`GET /v1/ping`](/api-reference/health/ping) | Verify an API key and show what it resolves to. |
+
+## Customers
+
+A customer is the identity record other resources belong to. Creating one issues that customer's key and MCP URL in the same response, and the key is returned only once.
+
+| Endpoint | Description |
+| --- | --- |
+| [`POST /v1/customers`](/api-reference/customers/create-customer) | Create a customer and issue their key. |
+| [`GET /v1/customers`](/api-reference/customers/list-customers) | List customers. |
+| [`GET /v1/customers/{id}`](/api-reference/customers/get-customer) | Get a customer. |
+
+Full walkthrough in the [Customer API](/platform/customers/customer-api).
+
+## Agent Wallets
+
+Wallets are named and belong to a customer, so a customer can hold several with different limits.
+
+| Endpoint | Description |
+| --- | --- |
+| [`POST /v1/customers/{id}/wallets`](/api-reference/agent-wallets/create-customer-wallet) | Create a named wallet for a customer. |
+| [`GET /v1/customers/{id}/wallets`](/api-reference/agent-wallets/list-customer-wallets) | Every named wallet this customer holds. |
+
+Wallet creation is idempotent by nature: a repeated creation returns the existing wallet rather than a second one. See [Agent Wallets](/platform/agent-wallets/overview) and [Limits and controls](/platform/agent-wallets/limits-and-controls).
+
+## Payment links
+
+A payment link is one of four types — `charge`, `subscription`, `session` or `per_request` — and moves through `pending`, `partial`, `active`, `settling`, `paid`, `settled`, `expired` or `cancelled`.
+
+| Endpoint | Description |
+| --- | --- |
+| [`POST /v1/payment-links`](/api-reference/payment-links/create-payment-link) | Create a payment link. |
+| [`GET /v1/payment-links`](/api-reference/payment-links/list-payment-links) | List payment links. |
+| [`GET /v1/payment-links/{id}`](/api-reference/payment-links/get-payment-link) | Get a payment link. |
+| [`PATCH /v1/payment-links/{id}`](/api-reference/payment-links/update-payment-link) | Update a payment link. |
+| [`DELETE /v1/payment-links/{id}/cancel`](/api-reference/payment-links/cancel-payment-link) | Cancel a payment link. |
+
+Once a link has been raised for a sale it can no longer be updated or cancelled, and both endpoints answer `409`. Only a `pending`, `partial` or `active` link is cancellable. See [Payment experiences](/platform/payments/payment-experiences).
+
+## Invoices
+
+| Endpoint | Description |
+| --- | --- |
+| [`POST /v1/invoices`](/api-reference/invoices/create-invoice) | Create an invoice. |
+| [`GET /v1/invoices`](/api-reference/invoices/list-invoices) | List invoices. |
+| [`GET /v1/invoices/{id}`](/api-reference/invoices/get-invoice) | Get an invoice. |
+| [`PATCH /v1/invoices/{id}`](/api-reference/invoices/update-invoice) | Update an invoice. |
+| [`POST /v1/invoices/{id}/send`](/api-reference/invoices/send-invoice) | Send an invoice to its recipient. |
+| [`DELETE /v1/invoices/{id}/cancel`](/api-reference/invoices/cancel-invoice) | Cancel an invoice. |
+
+An invoice is `draft` until it is sent, then `sent`, `viewed`, `settling`, `paid`, `overdue` or `cancelled`. Creating and sending are separate calls, so an invoice can be assembled and corrected before the recipient ever sees it. See [Invoices](/platform/payments/invoices).
+
+## Subscription plans
+
+A plan is the reusable price — an amount, a currency and a billing interval of `day`, `week`, `month` or `year`. Subscriptions reference it rather than restating it.
+
+| Endpoint | Description |
+| --- | --- |
+| [`POST /v1/subscription-plans`](/api-reference/subscription-plans/create-subscription-plan) | Create a subscription plan. |
+| [`GET /v1/subscription-plans`](/api-reference/subscription-plans/list-subscription-plans) | List subscription plans. |
+| [`GET /v1/subscription-plans/{id}`](/api-reference/subscription-plans/get-subscription-plan) | Get a subscription plan. |
+
+## Subscriptions
+
+| Endpoint | Description |
+| --- | --- |
+| [`POST /v1/subscriptions`](/api-reference/subscriptions/create-subscription) | Create a subscription. |
+| [`GET /v1/subscriptions`](/api-reference/subscriptions/list-subscriptions) | List subscriptions. |
+| [`GET /v1/subscriptions/{id}`](/api-reference/subscriptions/get-subscription) | Get a subscription. |
+| [`POST /v1/subscriptions/{id}/cancel`](/api-reference/subscriptions/cancel-subscription) | Cancel a subscription. |
+| [`GET /v1/subscriptions/{id}/invoices`](/api-reference/subscriptions/list-subscription-invoices) | List invoices for a subscription. |
+
+A subscription is `active`, `past_due`, `paused`, `cancelled` or `expired`. Billing changes arrive as webhook events, so drive your own records from those rather than polling. See [Subscriptions](/platform/payments/subscriptions).
+
+## Agent payments
+
+| Endpoint | Description |
+| --- | --- |
+| [`GET /v1/proxy-requests/{id}`](/api-reference/agent-payments/get-proxy-request) | Confirm a proxied request was paid. |
+
+When Mitu forwards a paid request to your API, this is how your backend confirms out-of-band that the request was genuinely paid, and what was settled. An amount is only recorded once money was actually taken, so `paid` is the field to branch on. The response includes `wallet_transaction_id`, the settlement you can check on-chain yourself.
+
+Verifying the forwarded request itself — signature, timestamp, replay — is covered in [Request verification](/platform/security/request-verification).
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="Authentication" icon="regular right-to-bracket" href="/api-reference/authentication">
+    Keys, Sandbox and verifying your credentials.
+  </Card>
+
+  <Card title="Idempotency" icon="regular arrows-rotate" href="/api-reference/idempotency">
+    Make every write safe to retry.
+  </Card>
+
+  <Card title="Common integration errors" icon="regular triangle-exclamation" href="/api-reference/common-integration-errors">
+    The mistakes that cost the most time.
+  </Card>
+
+  <Card title="Events" icon="regular bolt" href="/platform/webhooks/events">
+    The event each of these resources emits.
+  </Card>
+</CardGroup>

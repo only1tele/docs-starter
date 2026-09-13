@@ -1,5 +1,110 @@
 ---
 title: Idempotency
+subtitle: Safely retry API requests without performing the same operation more than once.
 ---
 
-<Note>This page is being written. See the platform guide for the source material.</Note>
+API requests can fail in ways that leave the final result unclear. For example, Mitu may successfully process a request while a network interruption prevents your application from receiving the response. Retrying the request as a new operation could then create a duplicate customer, payment, invoice or other resource.
+
+Mitu supports idempotency so your application can safely retry these requests. Include an `Idempotency-Key` with requests that create or change resources, then reuse the same key whenever you retry the same operation. Mitu uses the key to recognise that the request is a retry rather than a new operation.
+
+## Using an idempotency key
+
+Send an idempotency key in the `Idempotency-Key` header. The value should uniquely identify the operation in your system and remain the same for every attempt to complete that operation.
+
+For example, when creating a customer:
+
+```bash
+curl --request POST \
+  --url https://sandbox-api.mitu.ai/v1/customers \
+  --header "x-api-key: $MITU_API_KEY" \
+  --header "Idempotency-Key: customer-your_user_8841" \
+  --header "Content-Type: application/json" \
+  --data '{
+    "client_reference_id": "your_user_8841",
+    "first_name": "Ada",
+    "last_name": "Obi"
+  }'
+```
+
+If the request completes successfully but your application does not receive the response, you can send the request again using the same `Idempotency-Key`. Mitu can recognise the repeated request as another attempt to complete the same operation instead of treating it as a new customer creation request.
+
+The same behaviour applies when you use the Production API at `https://api.mitu.ai`. Your application should use the API key and base URL for the environment it is operating in, while the way you generate and reuse idempotency keys remains the same.
+
+## Choosing an idempotency key
+
+An idempotency key should identify one logical operation, not one HTTP attempt. If your application needs three attempts to complete the same operation because of timeouts or temporary failures, all three requests should use the same key.
+
+You can generate a unique value when the operation begins or derive one from a stable identifier in your own system. For example, an order, invoice or customer creation operation can use a key based on the corresponding identifier in your application.
+
+```text
+customer-your_user_8841
+order-8841
+invoice-2026-1042
+```
+
+The exact format is up to your application. What matters is that the value is unique to the operation and remains stable for every retry of that operation. If your application intentionally starts a different operation, it should use a new idempotency key.
+
+## Keep retries consistent
+
+When you retry a request, use the same idempotency key and keep the request consistent with the original attempt. Reusing a key for a different operation defeats the purpose of idempotency because the same identifier would then represent two different intentions.
+
+A useful approach is to create the idempotency key when your application creates the underlying operation and store it alongside your own record. If a retry becomes necessary, your application can retrieve the original key rather than generating another one. This is particularly important for payment and financial operations where an uncertain network response should not result in the same action being performed twice.
+
+<Warning>
+  Do not generate a new idempotency key every time you retry the same operation. A new key represents a new operation, so Mitu cannot use it to recognise the request as a retry of the original one.
+</Warning>
+
+## When to use idempotency
+
+Use idempotency for requests that create resources, move money or otherwise change state when performing the same operation twice could have unintended consequences. It is especially useful when your application automatically retries requests after network failures or temporary server errors.
+
+| Operation | Why idempotency is useful |
+| --- | --- |
+| Create a customer | Prevent the same customer creation operation from being processed more than once |
+| Issue an Agent Wallet | Prevent a retry from issuing another wallet unintentionally |
+| Create a payment | Prevent duplicate payment operations when the original response is uncertain |
+| Create an invoice | Prevent the same invoice from being created more than once |
+| Create a subscription | Prevent duplicate subscriptions when a request is retried |
+
+Read-only requests such as `GET` requests do not normally require an idempotency key because repeating the request does not create a resource or perform the operation again.
+
+## Retrying a request
+
+Idempotency makes a request safe to retry, but it does not mean every failed request should automatically be retried. A timeout, interrupted connection or temporary server failure may leave the outcome uncertain, which is where retrying with the same idempotency key is useful. Authentication failures, validation errors and other problems with the request itself should be corrected before another request is made.
+
+When retrying the same operation, keep the request body and idempotency key consistent with the original request. If you change the operation itself, create a new idempotency key so Mitu can distinguish it from the previous operation.
+
+## Sandbox and Production
+
+Sandbox and Production are separate Mitu environments, and your application should keep idempotent operations within the environment where they were started. Use `https://sandbox-api.mitu.ai` while developing and testing your integration, then use `https://api.mitu.ai` for live operations.
+
+| Environment | Base URL |
+| --- | --- |
+| Sandbox | `https://sandbox-api.mitu.ai` |
+| Production | `https://api.mitu.ai` |
+
+An operation started in Sandbox should be retried against the Sandbox API using the same Sandbox credentials. Likewise, a Production operation should continue against the Production API. Resources and credentials are separate between the two environments, so idempotency should not be used as a mechanism for carrying operations from one environment to another.
+
+## Requests sent to your API
+
+`Idempotency-Key` protects requests that your backend sends to the Mitu API. There is a separate mechanism for requests travelling in the opposite direction.
+
+When Mitu sends a request to your API, it includes `x-mitu-request-id` to identify that forwarded request. Your backend can store the request identifier alongside the operation it creates and use it to avoid processing the same Mitu request more than once. Before trusting the request identifier or any other Mitu headers, your backend should first verify the request using its request signing secret.
+
+See [Request verification](/platform/security/request-verification) for how to verify and safely process requests Mitu sends to your backend.
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="Authentication" icon="regular key" href="/api-reference/authentication">
+    Authenticate requests to the Mitu API in Sandbox and Production.
+  </Card>
+
+  <Card title="Errors" icon="regular triangle-exclamation" href="/api-reference/errors">
+    Understand API errors and determine when a request should be retried.
+  </Card>
+
+  <Card title="Request verification" icon="regular shield-check" href="/platform/security/request-verification">
+    Verify and safely process requests Mitu sends to your backend.
+  </Card>
+</CardGroup>

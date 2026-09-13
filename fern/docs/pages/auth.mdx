@@ -1,5 +1,99 @@
 ---
 title: Authentication
+subtitle: Authenticate requests to the Mitu API using your merchant API key.
 ---
 
-<Note>This page is being written. See the platform guide for the source material.</Note>
+Mitu uses API keys to authenticate requests to the API. Create a merchant API key from the Mitu dashboard and include it with requests from your backend.
+
+Your merchant API key identifies your business account and gives your application access to the resources available in that environment. It is a server-side credential and should never be exposed in browser code, mobile applications, AI clients or other public environments.
+
+<Warning title="Keep your API key secure">
+  Store your merchant API key securely and never commit it to source control, include it in client-side code or share it through public or internal communication channels.
+</Warning>
+
+## Authenticate a request
+
+Include your merchant API key in the `x-api-key` header of every request. All requests must be made over HTTPS.
+
+```http
+x-api-key: <your-api-key>
+```
+
+For example:
+
+```bash
+curl --request GET \
+  --url https://api.mitu.ai/v1/customers \
+  --header "x-api-key: $MITU_API_KEY"
+```
+
+Requests without a valid merchant API key are rejected.
+
+## Environments
+
+Mitu provides separate Sandbox and Production environments. Use Sandbox while building and testing your integration, then switch to Production when you are ready to process live activity.
+
+| Environment | Base URL | Use |
+| --- | --- | --- |
+| Sandbox | `https://sandbox-api.mitu.ai` | Development and testing |
+| Production | `https://api.mitu.ai` | Live operations |
+
+Each environment has its own account, credentials and resources. To use Sandbox, sign in to the Mitu Sandbox and create an API key there. Use that key only with the Sandbox API.
+
+```bash title="Sandbox request"
+curl --request GET \
+  --url https://sandbox-api.mitu.ai/v1/customers \
+  --header "x-api-key: $MITU_API_KEY"
+```
+
+When you are ready to go live, use an API key from your Production account and send requests to the Production API.
+
+```bash title="Production request"
+curl --request GET \
+  --url https://api.mitu.ai/v1/customers \
+  --header "x-api-key: $MITU_API_KEY"
+```
+
+<Note>
+  Sandbox and Production are separate environments. Customers, wallets, payments and other resources created in Sandbox do not appear in Production, and Sandbox credentials should not be used against the Production API.
+</Note>
+
+## Verify your API key
+
+Use `GET /v1/ping` to confirm that your API key can authenticate successfully in the environment you are connecting to. The endpoint has no side effects, so it is useful when setting up a new integration or checking your configuration.
+
+```bash title="Sandbox"
+curl --request GET \
+  --url https://sandbox-api.mitu.ai/v1/ping \
+  --header "x-api-key: $MITU_API_KEY"
+```
+
+```bash title="Production"
+curl --request GET \
+  --url https://api.mitu.ai/v1/ping \
+  --header "x-api-key: $MITU_API_KEY"
+```
+
+Use the same environment consistently throughout an integration. Your API key, base URL and the resources you work with should all belong to either Sandbox or Production.
+
+## Keep your API key server-side
+
+Store your merchant API key in an environment variable or secrets manager and make authenticated requests from your backend. Do not include the key in frontend JavaScript, mobile applications or AI client configuration.
+
+Mitu uses separate credentials for customer authentication, request verification and webhook verification. Those credentials serve different purposes and cannot be used in place of your merchant API key. See [Keys and secrets](/platform/security/keys-and-secrets) for the different credential types.
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="Idempotency" icon="regular arrows-rotate" href="/api-reference/idempotency">
+    Retry authenticated API requests safely.
+  </Card>
+
+  <Card title="Keys and secrets" icon="regular key" href="/platform/security/keys-and-secrets">
+    Understand the credentials used across your Mitu integration.
+  </Card>
+
+  <Card title="Get set up with Mitu" icon="regular rocket" href="/guides/quick-start/get-set-up-with-mitu">
+    Set up your environment and make your first API request.
+  </Card>
+</CardGroup>
