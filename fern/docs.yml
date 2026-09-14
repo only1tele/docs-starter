@@ -160,6 +160,14 @@ navigation:
         skip-slug: true
 
 redirects:
+  # Plans moved under Subscriptions: a plan only exists to be subscribed to,
+  # so splitting them across two tags made one flow span two sidebar groups.
+  - source: "/api-reference/subscription-plans/create-subscription-plan"
+    destination: "/api-reference/subscriptions/create-subscription-plan"
+  - source: "/api-reference/subscription-plans/list-subscription-plans"
+    destination: "/api-reference/subscriptions/list-subscription-plans"
+  - source: "/api-reference/subscription-plans/get-subscription-plan"
+    destination: "/api-reference/subscriptions/get-subscription-plan"
   - source: "/api-reference/endpoints"
     destination: "/api-reference/authentication"
   - source: "/platform/customers/customers-through-o-auth"

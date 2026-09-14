@@ -20,13 +20,10 @@ tags:
   description: Issue and retrieve Agent Wallets for customers.
 - name: Payment links
   description: Create and manage payment links.
-# Commented out with their paths — see the note in `paths:`.
-# - name: Invoices
-#   description: Create and manage invoices.
-# - name: Subscription plans
-#   description: Create and retrieve subscription plans.
-# - name: Subscriptions
-#   description: Create and manage subscriptions.
+- name: Invoices
+  description: Create and manage invoices.
+- name: Subscriptions
+  description: Create the plans customers subscribe to, and manage the subscriptions themselves.
 - name: Agent payments
   description: Verify requests paid through Mitu.
 paths:
@@ -530,470 +527,462 @@ paths:
           $ref: '#/components/responses/RateLimited'
         '500':
           $ref: '#/components/responses/InternalServerError'
-  # ---------------------------------------------------------------------------
-  # Invoices, subscription plans and subscriptions are commented out.
-  #
-  # These operations were never checked against economy-service. Every tag that
-  # has been checked needed correcting - the response envelope, the pagination,
-  # the field casing - so publishing these unverified would be publishing three
-  # more tags of guesses. Uncomment a block once its controller has been read.
-  # ---------------------------------------------------------------------------
-  #   /v1/invoices:
-  #     post:
-  #       operationId: createInvoice
-  #       summary: Create an invoice
-  #       tags:
-  #       - Invoices
-  #       requestBody:
-  #         required: true
-  #         content:
-  #           application/json:
-  #             schema:
-  #               $ref: '#/components/schemas/CreateInvoice'
-  #       responses:
-  #         '201':
-  #           description: Invoice created successfully.
-  #           content:
-  #             application/json:
-  #               schema:
-  #                 $ref: '#/components/schemas/InvoiceResponse'
-  #         '400':
-  #           $ref: '#/components/responses/BadRequest'
-  #         '401':
-  #           $ref: '#/components/responses/Unauthorized'
-  #         '403':
-  #           $ref: '#/components/responses/Forbidden'
-  #         '422':
-  #           $ref: '#/components/responses/ValidationError'
-  #         '429':
-  #           $ref: '#/components/responses/RateLimited'
-  #         '500':
-  #           $ref: '#/components/responses/InternalServerError'
-  #       description: Create an invoice for a customer.
-  #       parameters:
-  #       - $ref: '#/components/parameters/IdempotencyKey'
-  #     get:
-  #       operationId: listInvoices
-  #       summary: List invoices
-  #       tags:
-  #       - Invoices
-  #       parameters:
-  #       - name: status
-  #         in: query
-  #         schema:
-  #           $ref: '#/components/schemas/InvoiceStatus'
-  #         description: Filter by invoice status.
-  #       - name: customer_id
-  #         in: query
-  #         description: Return invoices for a specific customer.
-  #         schema:
-  #           type: string
-  #       - $ref: '#/components/parameters/Limit'
-  #       - $ref: '#/components/parameters/Cursor'
-  #       responses:
-  #         '200':
-  #           description: Invoices retrieved successfully.
-  #           content:
-  #             application/json:
-  #               schema:
-  #                 $ref: '#/components/schemas/InvoiceListResponse'
-  #         '401':
-  #           $ref: '#/components/responses/Unauthorized'
-  #         '403':
-  #           $ref: '#/components/responses/Forbidden'
-  #         '422':
-  #           $ref: '#/components/responses/ValidationError'
-  #         '429':
-  #           $ref: '#/components/responses/RateLimited'
-  #         '500':
-  #           $ref: '#/components/responses/InternalServerError'
-  #       description: Retrieve invoices created by your account. Results are returned using cursor-based pagination.
-  #   /v1/invoices/{id}:
-  #     get:
-  #       operationId: getInvoice
-  #       summary: Get an invoice
-  #       tags:
-  #       - Invoices
-  #       parameters:
-  #       - $ref: '#/components/parameters/PathId'
-  #       responses:
-  #         '200':
-  #           description: Invoice retrieved successfully.
-  #           content:
-  #             application/json:
-  #               schema:
-  #                 $ref: '#/components/schemas/InvoiceResponse'
-  #         '401':
-  #           $ref: '#/components/responses/Unauthorized'
-  #         '403':
-  #           $ref: '#/components/responses/Forbidden'
-  #         '404':
-  #           $ref: '#/components/responses/NotFound'
-  #         '422':
-  #           $ref: '#/components/responses/ValidationError'
-  #         '429':
-  #           $ref: '#/components/responses/RateLimited'
-  #         '500':
-  #           $ref: '#/components/responses/InternalServerError'
-  #       description: Retrieve an invoice by its ID.
-  #     patch:
-  #       operationId: updateInvoice
-  #       summary: Update an invoice
-  #       tags:
-  #       - Invoices
-  #       parameters:
-  #       - $ref: '#/components/parameters/PathId'
-  #       requestBody:
-  #         required: true
-  #         content:
-  #           application/json:
-  #             schema:
-  #               $ref: '#/components/schemas/UpdateInvoice'
-  #       responses:
-  #         '200':
-  #           description: Invoice updated successfully.
-  #           content:
-  #             application/json:
-  #               schema:
-  #                 $ref: '#/components/schemas/InvoiceResponse'
-  #         '400':
-  #           $ref: '#/components/responses/BadRequest'
-  #         '401':
-  #           $ref: '#/components/responses/Unauthorized'
-  #         '403':
-  #           $ref: '#/components/responses/Forbidden'
-  #         '404':
-  #           $ref: '#/components/responses/NotFound'
-  #         '409':
-  #           $ref: '#/components/responses/Conflict'
-  #         '422':
-  #           $ref: '#/components/responses/ValidationError'
-  #         '429':
-  #           $ref: '#/components/responses/RateLimited'
-  #         '500':
-  #           $ref: '#/components/responses/InternalServerError'
-  #       description: Update an invoice that is still editable.
-  #   /v1/invoices/{id}/send:
-  #     post:
-  #       operationId: sendInvoice
-  #       summary: Send an invoice
-  #       tags:
-  #       - Invoices
-  #       parameters:
-  #       - $ref: '#/components/parameters/PathId'
-  #       responses:
-  #         '200':
-  #           description: Invoice sent successfully.
-  #           content:
-  #             application/json:
-  #               schema:
-  #                 $ref: '#/components/schemas/InvoiceResponse'
-  #         '400':
-  #           $ref: '#/components/responses/BadRequest'
-  #         '401':
-  #           $ref: '#/components/responses/Unauthorized'
-  #         '403':
-  #           $ref: '#/components/responses/Forbidden'
-  #         '404':
-  #           $ref: '#/components/responses/NotFound'
-  #         '422':
-  #           $ref: '#/components/responses/ValidationError'
-  #         '429':
-  #           $ref: '#/components/responses/RateLimited'
-  #         '500':
-  #           $ref: '#/components/responses/InternalServerError'
-  #       description: Send an invoice to its recipient.
-  #   /v1/invoices/{id}/cancel:
-  #     delete:
-  #       operationId: cancelInvoice
-  #       summary: Cancel an invoice
-  #       tags:
-  #       - Invoices
-  #       parameters:
-  #       - $ref: '#/components/parameters/PathId'
-  #       responses:
-  #         '200':
-  #           description: Invoice cancelled successfully.
-  #           content:
-  #             application/json:
-  #               schema:
-  #                 $ref: '#/components/schemas/InvoiceResponse'
-  #         '400':
-  #           $ref: '#/components/responses/BadRequest'
-  #         '401':
-  #           $ref: '#/components/responses/Unauthorized'
-  #         '403':
-  #           $ref: '#/components/responses/Forbidden'
-  #         '404':
-  #           $ref: '#/components/responses/NotFound'
-  #         '409':
-  #           $ref: '#/components/responses/Conflict'
-  #         '422':
-  #           $ref: '#/components/responses/ValidationError'
-  #         '429':
-  #           $ref: '#/components/responses/RateLimited'
-  #         '500':
-  #           $ref: '#/components/responses/InternalServerError'
-  #       description: Cancel an invoice that is currently cancellable.
-  #   /v1/subscription-plans:
-  #     post:
-  #       operationId: createSubscriptionPlan
-  #       summary: Create a plan
-  #       tags:
-  #       - Subscription plans
-  #       requestBody:
-  #         required: true
-  #         content:
-  #           application/json:
-  #             schema:
-  #               $ref: '#/components/schemas/CreateSubscriptionPlan'
-  #       responses:
-  #         '201':
-  #           description: Subscription plan created successfully.
-  #           content:
-  #             application/json:
-  #               schema:
-  #                 $ref: '#/components/schemas/SubscriptionPlanResponse'
-  #         '400':
-  #           $ref: '#/components/responses/BadRequest'
-  #         '401':
-  #           $ref: '#/components/responses/Unauthorized'
-  #         '403':
-  #           $ref: '#/components/responses/Forbidden'
-  #         '422':
-  #           $ref: '#/components/responses/ValidationError'
-  #         '429':
-  #           $ref: '#/components/responses/RateLimited'
-  #         '500':
-  #           $ref: '#/components/responses/InternalServerError'
-  #       description: Create a subscription plan that can be used to start subscriptions.
-  #       parameters:
-  #       - $ref: '#/components/parameters/IdempotencyKey'
-  #     get:
-  #       operationId: listSubscriptionPlans
-  #       summary: List plans
-  #       tags:
-  #       - Subscription plans
-  #       parameters:
-  #       - name: status
-  #         in: query
-  #         schema:
-  #           type: string
-  #           enum:
-  #           - active
-  #           - paused
-  #           - archived
-  #         description: Filter by subscription plan status.
-  #       - $ref: '#/components/parameters/Limit'
-  #       - $ref: '#/components/parameters/Cursor'
-  #       responses:
-  #         '200':
-  #           description: Subscription plans retrieved successfully.
-  #           content:
-  #             application/json:
-  #               schema:
-  #                 $ref: '#/components/schemas/SubscriptionPlanListResponse'
-  #         '401':
-  #           $ref: '#/components/responses/Unauthorized'
-  #         '403':
-  #           $ref: '#/components/responses/Forbidden'
-  #         '422':
-  #           $ref: '#/components/responses/ValidationError'
-  #         '429':
-  #           $ref: '#/components/responses/RateLimited'
-  #         '500':
-  #           $ref: '#/components/responses/InternalServerError'
-  #       description: Retrieve subscription plans created by your account. Results are returned using cursor-based
-  #         pagination.
-  #   /v1/subscription-plans/{id}:
-  #     get:
-  #       operationId: getSubscriptionPlan
-  #       summary: Get a plan
-  #       tags:
-  #       - Subscription plans
-  #       parameters:
-  #       - $ref: '#/components/parameters/PathId'
-  #       responses:
-  #         '200':
-  #           description: Subscription plan retrieved successfully.
-  #           content:
-  #             application/json:
-  #               schema:
-  #                 $ref: '#/components/schemas/SubscriptionPlanResponse'
-  #         '401':
-  #           $ref: '#/components/responses/Unauthorized'
-  #         '403':
-  #           $ref: '#/components/responses/Forbidden'
-  #         '404':
-  #           $ref: '#/components/responses/NotFound'
-  #         '422':
-  #           $ref: '#/components/responses/ValidationError'
-  #         '429':
-  #           $ref: '#/components/responses/RateLimited'
-  #         '500':
-  #           $ref: '#/components/responses/InternalServerError'
-  #       description: Retrieve a subscription plan by its ID.
-  #   /v1/subscriptions:
-  #     post:
-  #       operationId: createSubscription
-  #       summary: Create a subscription
-  #       tags:
-  #       - Subscriptions
-  #       requestBody:
-  #         required: true
-  #         content:
-  #           application/json:
-  #             schema:
-  #               $ref: '#/components/schemas/CreateSubscription'
-  #       responses:
-  #         '201':
-  #           description: Subscription created successfully.
-  #           content:
-  #             application/json:
-  #               schema:
-  #                 $ref: '#/components/schemas/SubscriptionResponse'
-  #         '400':
-  #           $ref: '#/components/responses/BadRequest'
-  #         '401':
-  #           $ref: '#/components/responses/Unauthorized'
-  #         '403':
-  #           $ref: '#/components/responses/Forbidden'
-  #         '422':
-  #           $ref: '#/components/responses/ValidationError'
-  #         '429':
-  #           $ref: '#/components/responses/RateLimited'
-  #         '500':
-  #           $ref: '#/components/responses/InternalServerError'
-  #       description: Create a subscription from an existing subscription plan.
-  #       parameters:
-  #       - $ref: '#/components/parameters/IdempotencyKey'
-  #     get:
-  #       operationId: listSubscriptions
-  #       summary: List subscriptions
-  #       tags:
-  #       - Subscriptions
-  #       parameters:
-  #       - name: status
-  #         in: query
-  #         schema:
-  #           $ref: '#/components/schemas/SubscriptionStatus'
-  #         description: Filter by subscription status.
-  #       - name: subscription_plan_id
-  #         in: query
-  #         schema:
-  #           type: string
-  #         description: Return subscriptions for a specific subscription plan.
-  #       - $ref: '#/components/parameters/Limit'
-  #       - $ref: '#/components/parameters/Cursor'
-  #       responses:
-  #         '200':
-  #           description: Subscriptions retrieved successfully.
-  #           content:
-  #             application/json:
-  #               schema:
-  #                 $ref: '#/components/schemas/SubscriptionListResponse'
-  #         '401':
-  #           $ref: '#/components/responses/Unauthorized'
-  #         '403':
-  #           $ref: '#/components/responses/Forbidden'
-  #         '422':
-  #           $ref: '#/components/responses/ValidationError'
-  #         '429':
-  #           $ref: '#/components/responses/RateLimited'
-  #         '500':
-  #           $ref: '#/components/responses/InternalServerError'
-  #       description: Retrieve subscriptions associated with your account. Results are returned using cursor-based
-  #         pagination.
-  #   /v1/subscriptions/{id}:
-  #     get:
-  #       operationId: getSubscription
-  #       summary: Get a subscription
-  #       tags:
-  #       - Subscriptions
-  #       parameters:
-  #       - $ref: '#/components/parameters/PathId'
-  #       responses:
-  #         '200':
-  #           description: Subscription retrieved successfully.
-  #           content:
-  #             application/json:
-  #               schema:
-  #                 $ref: '#/components/schemas/SubscriptionResponse'
-  #         '401':
-  #           $ref: '#/components/responses/Unauthorized'
-  #         '403':
-  #           $ref: '#/components/responses/Forbidden'
-  #         '404':
-  #           $ref: '#/components/responses/NotFound'
-  #         '422':
-  #           $ref: '#/components/responses/ValidationError'
-  #         '429':
-  #           $ref: '#/components/responses/RateLimited'
-  #         '500':
-  #           $ref: '#/components/responses/InternalServerError'
-  #       description: Retrieve a subscription by its ID.
-  #   /v1/subscriptions/{id}/cancel:
-  #     post:
-  #       operationId: cancelSubscription
-  #       summary: Cancel a subscription
-  #       tags:
-  #       - Subscriptions
-  #       parameters:
-  #       - $ref: '#/components/parameters/PathId'
-  #       responses:
-  #         '200':
-  #           description: Subscription cancelled successfully.
-  #           content:
-  #             application/json:
-  #               schema:
-  #                 $ref: '#/components/schemas/SubscriptionResponse'
-  #         '400':
-  #           $ref: '#/components/responses/BadRequest'
-  #         '401':
-  #           $ref: '#/components/responses/Unauthorized'
-  #         '403':
-  #           $ref: '#/components/responses/Forbidden'
-  #         '404':
-  #           $ref: '#/components/responses/NotFound'
-  #         '409':
-  #           $ref: '#/components/responses/Conflict'
-  #         '422':
-  #           $ref: '#/components/responses/ValidationError'
-  #         '429':
-  #           $ref: '#/components/responses/RateLimited'
-  #         '500':
-  #           $ref: '#/components/responses/InternalServerError'
-  #       description: Cancel an active subscription.
-  #   /v1/subscriptions/{id}/invoices:
-  #     get:
-  #       operationId: listSubscriptionInvoices
-  #       summary: List invoices
-  #       tags:
-  #       - Subscriptions
-  #       parameters:
-  #       - $ref: '#/components/parameters/PathId'
-  #       - $ref: '#/components/parameters/Limit'
-  #       - $ref: '#/components/parameters/Cursor'
-  #       responses:
-  #         '200':
-  #           description: Subscription invoices retrieved successfully.
-  #           content:
-  #             application/json:
-  #               schema:
-  #                 $ref: '#/components/schemas/SubscriptionInvoiceListResponse'
-  #         '401':
-  #           $ref: '#/components/responses/Unauthorized'
-  #         '403':
-  #           $ref: '#/components/responses/Forbidden'
-  #         '404':
-  #           $ref: '#/components/responses/NotFound'
-  #         '422':
-  #           $ref: '#/components/responses/ValidationError'
-  #         '429':
-  #           $ref: '#/components/responses/RateLimited'
-  #         '500':
-  #           $ref: '#/components/responses/InternalServerError'
-  #       description: Retrieve invoices generated for a subscription. Results are returned using cursor-based pagination.
+  /v1/invoices:
+    post:
+      operationId: createInvoice
+      summary: Create an invoice
+      tags:
+      - Invoices
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateInvoice'
+      responses:
+        '201':
+          description: Invoice created successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InvoiceResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+      description: Create an invoice for a customer.
+      parameters:
+      - $ref: '#/components/parameters/IdempotencyKey'
+    get:
+      operationId: listInvoices
+      summary: List invoices
+      tags:
+      - Invoices
+      parameters:
+      - name: status
+        in: query
+        schema:
+          $ref: '#/components/schemas/InvoiceStatus'
+        description: Filter by invoice status.
+      - name: customer_id
+        in: query
+        description: Return invoices for a specific customer.
+        schema:
+          type: string
+      - $ref: '#/components/parameters/Limit'
+      - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: Invoices retrieved successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InvoiceListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+      description: Retrieve invoices created by your account. Results are returned using cursor-based pagination.
+  /v1/invoices/{id}:
+    get:
+      operationId: getInvoice
+      summary: Get an invoice
+      tags:
+      - Invoices
+      parameters:
+      - $ref: '#/components/parameters/PathId'
+      responses:
+        '200':
+          description: Invoice retrieved successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InvoiceResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+      description: Retrieve an invoice by its ID.
+    patch:
+      operationId: updateInvoice
+      summary: Update an invoice
+      tags:
+      - Invoices
+      parameters:
+      - $ref: '#/components/parameters/PathId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateInvoice'
+      responses:
+        '200':
+          description: Invoice updated successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InvoiceResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+      description: Update an invoice that is still editable.
+  /v1/invoices/{id}/send:
+    post:
+      operationId: sendInvoice
+      summary: Send an invoice
+      tags:
+      - Invoices
+      parameters:
+      - $ref: '#/components/parameters/PathId'
+      responses:
+        '200':
+          description: Invoice sent successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InvoiceResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+      description: Send an invoice to its recipient.
+  /v1/invoices/{id}/cancel:
+    delete:
+      operationId: cancelInvoice
+      summary: Cancel an invoice
+      tags:
+      - Invoices
+      parameters:
+      - $ref: '#/components/parameters/PathId'
+      responses:
+        '200':
+          description: Invoice cancelled successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InvoiceResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+      description: Cancel an invoice that is currently cancellable.
+  /v1/subscription-plans:
+    post:
+      operationId: createSubscriptionPlan
+      summary: Create a plan
+      tags:
+      - Subscriptions
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateSubscriptionPlan'
+      responses:
+        '201':
+          description: Subscription plan created successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SubscriptionPlanResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+      description: Create a subscription plan that can be used to start subscriptions.
+      parameters:
+      - $ref: '#/components/parameters/IdempotencyKey'
+    get:
+      operationId: listSubscriptionPlans
+      summary: List plans
+      tags:
+      - Subscriptions
+      parameters:
+      - name: status
+        in: query
+        schema:
+          type: string
+          enum:
+          - active
+          - paused
+          - archived
+        description: Filter by subscription plan status.
+      - $ref: '#/components/parameters/Limit'
+      - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: Subscription plans retrieved successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SubscriptionPlanListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+      description: Retrieve subscription plans created by your account. Results are returned using cursor-based
+        pagination.
+  /v1/subscription-plans/{id}:
+    get:
+      operationId: getSubscriptionPlan
+      summary: Get a plan
+      tags:
+      - Subscriptions
+      parameters:
+      - $ref: '#/components/parameters/PathId'
+      responses:
+        '200':
+          description: Subscription plan retrieved successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SubscriptionPlanResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+      description: Retrieve a subscription plan by its ID.
+  /v1/subscriptions:
+    post:
+      operationId: createSubscription
+      summary: Create a subscription
+      tags:
+      - Subscriptions
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateSubscription'
+      responses:
+        '201':
+          description: Subscription created successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SubscriptionResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+      description: Create a subscription from an existing subscription plan.
+      parameters:
+      - $ref: '#/components/parameters/IdempotencyKey'
+    get:
+      operationId: listSubscriptions
+      summary: List subscriptions
+      tags:
+      - Subscriptions
+      parameters:
+      - name: status
+        in: query
+        schema:
+          $ref: '#/components/schemas/SubscriptionStatus'
+        description: Filter by subscription status.
+      - name: subscription_plan_id
+        in: query
+        schema:
+          type: string
+        description: Return subscriptions for a specific subscription plan.
+      - $ref: '#/components/parameters/Limit'
+      - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: Subscriptions retrieved successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SubscriptionListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+      description: Retrieve subscriptions associated with your account. Results are returned using cursor-based
+        pagination.
+  /v1/subscriptions/{id}:
+    get:
+      operationId: getSubscription
+      summary: Get a subscription
+      tags:
+      - Subscriptions
+      parameters:
+      - $ref: '#/components/parameters/PathId'
+      responses:
+        '200':
+          description: Subscription retrieved successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SubscriptionResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+      description: Retrieve a subscription by its ID.
+  /v1/subscriptions/{id}/cancel:
+    post:
+      operationId: cancelSubscription
+      summary: Cancel a subscription
+      tags:
+      - Subscriptions
+      parameters:
+      - $ref: '#/components/parameters/PathId'
+      responses:
+        '200':
+          description: Subscription cancelled successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SubscriptionResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+      description: Cancel an active subscription.
+  /v1/subscriptions/{id}/invoices:
+    get:
+      operationId: listSubscriptionInvoices
+      summary: List invoices
+      tags:
+      - Subscriptions
+      parameters:
+      - $ref: '#/components/parameters/PathId'
+      - $ref: '#/components/parameters/Limit'
+      - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: Subscription invoices retrieved successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SubscriptionInvoiceListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+      description: Retrieve invoices generated for a subscription. Results are returned using cursor-based pagination.
   /v1/proxy-requests/{id}:
     get:
       operationId: getProxyRequest
@@ -1458,7 +1447,7 @@ components:
         amount:
           type: number
           example: 25
-          description: Required for `charge` and `per_request`. `session` uses `sessionMaxDeposit`; `subscription`
+          description: Required for `charge` and `per_request`. `session` uses `session_max_deposit`; `subscription`
             derives it from the plan.
         currency:
           type: string
@@ -1474,12 +1463,12 @@ components:
           maxLength: 255
           description: Your own reference for this payment, such as an order or booking id. Returned with payment
             events so you can reconcile against a record your system already knows.
-        expiresAt:
+        expires_at:
           type: string
           example: '2026-09-30T23:59:59.000Z'
           format: date-time
           description: When the payment can no longer be completed.
-        paymentMethods:
+        payment_methods:
           type: array
           items:
             $ref: '#/components/schemas/PaymentMethod'
@@ -1490,30 +1479,30 @@ components:
             type: string
           description: Free-form metadata returned with the payment. Do not store secrets or sensitive credentials
             here.
-        planId:
+        plan_id:
           type: string
           example: plan_6d1a83f95c20
           description: '`subscription` only — a single plan id.'
-        planIds:
+        plan_ids:
           type: array
           items:
             type: string
           description: '`subscription` only — offer several plans for the payer to choose between.'
-        allowCustomerChoice:
+        allow_customer_choice:
           type: boolean
           example: false
           default: false
-          description: '`subscription` only — let the payer choose among `planIds`.'
-        sessionMaxDeposit:
+          description: '`subscription` only — let the payer choose among `plan_ids`.'
+        session_max_deposit:
           type: number
           example: 50
           description: '`session` only — the most the payer can fund for the session.'
-        sessionExpiresAt:
+        session_expires_at:
           type: string
           example: '2026-09-30T23:59:59.000Z'
           format: date-time
           description: '`session` only.'
-        endpointPattern:
+        endpoint_pattern:
           type: string
           example: /orders
           maxLength: 500
@@ -1524,8 +1513,8 @@ components:
         currency: USD
         description: Two large pizzas
         reference: ORDER-8841
-        expiresAt: '2026-09-30T23:59:59.000Z'
-        paymentMethods:
+        expires_at: '2026-09-30T23:59:59.000Z'
+        payment_methods:
         - x402
         - mpp_crypto
         metadata:
@@ -1541,7 +1530,7 @@ components:
           type: string
           example: ORDER-8841
           maxLength: 255
-        expiresAt:
+        expires_at:
           type: string
           example: '2026-09-30T23:59:59.000Z'
           format: date-time
@@ -1552,7 +1541,7 @@ components:
       example:
         description: Two large pizzas and a side
         reference: ORDER-8841
-        expiresAt: '2026-09-30T23:59:59.000Z'
+        expires_at: '2026-09-30T23:59:59.000Z'
     InvoiceLineItem:
       type: object
       required:
@@ -1790,9 +1779,9 @@ components:
         email: tele@mitu.ai
         phone: '+2348012345678'
         created_at: '2026-09-09T18:41:50.204Z'
-    PaymentLinkUrl:
+    PayUrl:
       type: object
-      description: The two ways to pay one payment link. `checkout` is the page a person opens; `agent` is the
+      description: The two ways to pay one resource. `checkout` is the page a person opens; `agent` is the
         402-protected route an AI agent calls. They are not interchangeable — an agent given the checkout URL
         receives HTML instead of a payment challenge.
       required:
@@ -1837,7 +1826,7 @@ components:
           example: ORDER-8841
           nullable: true
         url:
-          $ref: '#/components/schemas/PaymentLinkUrl'
+          $ref: '#/components/schemas/PayUrl'
         payment_methods:
           type: array
           nullable: true
@@ -1845,6 +1834,12 @@ components:
             $ref: '#/components/schemas/PaymentMethod'
           description: The agent payment methods available for this payment. `null` means no restriction — every
             method your account supports is available.
+        viewed_at:
+          type: string
+          example: '2026-09-11T15:02:11.004Z'
+          format: date-time
+          nullable: true
+          description: When a payer first opened the link. `null` means nobody has opened it yet.
         expires_at:
           type: string
           example: '2026-09-30T23:59:59.000Z'
@@ -1874,6 +1869,7 @@ components:
         payment_methods:
         - x402
         - mpp_crypto
+        viewed_at: '2026-09-11T15:02:11.004Z'
         expires_at: '2026-09-30T23:59:59.000Z'
         paid_at: null
         created_at: '2026-09-11T15:00:34.915Z'
@@ -1913,9 +1909,8 @@ components:
         discount_amount:
           type: string
           example: '0.00'
-        checkout_url:
-          type: string
-          example: 'https://mitu.ai/pay/inv_4b2e9f7c1a35'
+        url:
+          $ref: '#/components/schemas/PayUrl'
         due_at:
           type: string
           example: '2026-09-30T23:59:59.000Z'
@@ -1959,7 +1954,9 @@ components:
         currency: USD
         tax_amount: '0.00'
         discount_amount: '0.00'
-        checkout_url: https://mitu.ai/invoice/inv_4k2m9x7ptw3c
+        url:
+          checkout: 'https://mitu.ai/invoice/inv_4b2e9f7c1a35'
+          agent: 'https://api.mitu.ai/invoice/inv_4b2e9f7c1a35'
         due_at: '2026-09-30T23:59:59.000Z'
         sent_at: null
         viewed_at: null
@@ -2024,6 +2021,8 @@ components:
         id:
           type: string
           example: sub_2f7b46e0d913
+        url:
+          $ref: '#/components/schemas/PayUrl'
         subscription_plan_id:
           type: string
           example: plan_6d1a83f95c20
